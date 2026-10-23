@@ -7,6 +7,8 @@ urlpatterns = [
     path("api/", include("clientes.urls")),
     path("api/", include("transportistas.urls")),
     path("api/", include("cargas.urls")),
+    path("api/", include("tramites.urls")),
+    path("api/", include("cobros.urls")),
 ]
 
 # Respuestas JSON (sin páginas HTML ni trazas) cuando DEBUG=False
