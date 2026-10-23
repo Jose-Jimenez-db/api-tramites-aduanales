@@ -148,6 +148,16 @@ REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "core.permisos.PermisoPorRol",
     ],
+    "DEFAULT_FILTER_BACKENDS": [
+        "django_filters.rest_framework.DjangoFilterBackend",
+        "rest_framework.filters.SearchFilter",
+        "rest_framework.filters.OrderingFilter",
+    ],
+    "DEFAULT_PAGINATION_CLASS": "core.paginacion.PaginacionEstandar",
+    "PAGE_SIZE": 10,
+    "SEARCH_PARAM": "buscar",
+    "ORDERING_PARAM": "ordenar",
+    "EXCEPTION_HANDLER": "core.excepciones.manejador_de_errores",
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
