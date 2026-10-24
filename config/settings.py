@@ -161,6 +161,21 @@ REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
 }
 
+SPECTACULAR_SETTINGS = {
+    "TITLE": "API de Trámites Aduanales",
+    "DESCRIPTION": (
+        "Backend para una agencia aduanal en Puerto Caldera: clientes, "
+        "transportistas, cargas, trámites y cobros."
+    ),
+    "VERSION": "1.0.0",
+    "SERVE_INCLUDE_SCHEMA": False,
+    "ENUM_NAME_OVERRIDES": {
+        "EstadoTramiteEnum": "tramites.models.Tramite.Estado",
+        "EstadoPermisoEnum": "tramites.models.PermisoTramite.Estado",
+        "EstadoCobroEnum": "cobros.models.Cobro.Estado",
+    },
+}
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,
