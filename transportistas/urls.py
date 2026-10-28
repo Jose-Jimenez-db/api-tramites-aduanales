@@ -1,8 +1,8 @@
-from rest_framework.routers import SimpleRouter
+from django.urls import path
 
-from .views import TransportistaViewSet
+from . import views
 
-router = SimpleRouter()
-router.register("transportistas", TransportistaViewSet, basename="transportista")
-
-urlpatterns = router.urls
+urlpatterns = [
+    path("", views.transportistas_api, name="transportistas_api"),
+    path("<int:id>/", views.transportista_detalle_api, name="transportista_detalle_api"),
+]

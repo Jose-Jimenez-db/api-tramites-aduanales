@@ -18,7 +18,7 @@ from rest_framework.test import APITestCase
 from cargas.models import Carga
 from clientes.models import Cliente
 from cobros.models import Cobro
-from core.permisos import ADMINISTRADOR, CONSULTA, OPERADOR
+from cuentas.permisos import ADMINISTRADOR, CONSULTA, OPERADOR
 from tramites.models import PermisoTramite, TipoPermiso, Tramite
 from transportistas.models import Transportista
 
@@ -98,7 +98,8 @@ class PruebaAPI(APITestCase):
         cls.usuarios = {}
         for rol in (ADMINISTRADOR, OPERADOR, CONSULTA):
             usuario = Usuario.objects.create_user(username=f"prueba_{rol.lower()}")
-            usuario.groups.add(Group.objects.get(name=rol))
+            grupo, _ = Group.objects.get_or_create(name=rol)
+            usuario.groups.add(grupo)
             cls.usuarios[rol] = usuario
 
     def autenticar(self, rol):

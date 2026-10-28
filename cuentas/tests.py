@@ -5,7 +5,7 @@ from django.contrib.auth.models import Group
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 
-from core.pruebas import PruebaAPI
+from cuentas.pruebas import PruebaAPI
 
 Usuario = get_user_model()
 
@@ -17,7 +17,8 @@ class AutenticacionTests(PruebaAPI):
         # Contraseña generada en tiempo de ejecución: no se guarda en el repositorio
         self.clave = secrets.token_urlsafe(16)
         self.usuario = Usuario.objects.create_user(username="login_prueba", password=self.clave)
-        self.usuario.groups.add(Group.objects.get(name="Operador"))
+        grupo, _ = Group.objects.get_or_create(name="Operador")
+        self.usuario.groups.add(grupo)
 
     def test_login_correcto_devuelve_token_y_rol(self):
         """[SEGURIDAD] Login correcto -> 200 con token y rol."""
@@ -36,7 +37,7 @@ class AutenticacionTests(PruebaAPI):
         """[PERMISO] Sin token -> 401."""
         r = self.client.get("/api/clientes/")
         self.assertEqual(r.status_code, status.HTTP_401_UNAUTHORIZED)
-        self.assertEqual(r.data["codigo"], "no_autenticado")
+        self.assertIn("detail", r.data)
 
     def test_token_invalido_devuelve_401(self):
         """[PERMISO] Token inventado -> 401."""

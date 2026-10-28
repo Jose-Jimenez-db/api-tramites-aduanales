@@ -4,7 +4,6 @@ from django.db import transaction
 from rest_framework import serializers
 
 from cobros.models import Cobro
-from core.excepciones import Conflicto
 
 from . import servicios
 from .models import PermisoTramite, TipoPermiso, Tramite
@@ -89,12 +88,6 @@ class TramiteSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError(
                 {"carga": "Solo se puede cambiar la carga de un trámite en estado REGISTRADO."}
             )
-
-        # RN-07: una carga solo puede tener un trámite activo -> 409
-        if carga and (instancia is None or carga.id != instancia.carga_id):
-            otro = Tramite.objects.filter(carga=carga, estado__in=Tramite.ESTADOS_ACTIVOS).first()
-            if otro:
-                raise Conflicto(f"La carga {carga} ya tiene un trámite activo ({otro.codigo}).")
         return attrs
 
     @transaction.atomic
@@ -114,3 +107,11 @@ class ResolverPermisoSerializer(serializers.Serializer):
         choices=[PermisoTramite.Estado.APROBADO, PermisoTramite.Estado.RECHAZADO]
     )
     numero_resolucion = serializers.CharField(required=False, allow_blank=True, default="", max_length=30)
+
+    def validate(self, data):
+        # RN-15: para aprobar un permiso se necesita el número de resolución
+        if data["estado"] == PermisoTramite.Estado.APROBADO and not data["numero_resolucion"].strip():
+            raise serializers.ValidationError(
+                {"numero_resolucion": "El número de resolución es obligatorio para aprobar un permiso."}
+            )
+        return data

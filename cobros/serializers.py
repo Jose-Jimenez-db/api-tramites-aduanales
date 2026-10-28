@@ -1,6 +1,5 @@
 from rest_framework import serializers
 
-from core.excepciones import Conflicto
 from tramites.models import Tramite
 
 from .models import Cobro
@@ -25,6 +24,12 @@ class CobroSerializer(serializers.ModelSerializer):
     def get_registrado_por(self, obj) -> str:
         return obj.registrado_por.username if obj.registrado_por else None
 
+    def validate_monto(self, valor):
+        # RN-13: el monto debe ser mayor que 0
+        if valor <= 0:
+            raise serializers.ValidationError("El monto debe ser mayor que 0.")
+        return valor
+
     def validate_tramite(self, tramite):
         if self.instance and tramite.id != self.instance.tramite_id:
             raise serializers.ValidationError("Un cobro no se puede trasladar a otro trámite.")
@@ -34,19 +39,6 @@ class CobroSerializer(serializers.ModelSerializer):
                 "No se pueden registrar cobros en un trámite liberado o cancelado."
             )
         return tramite
-
-    def validate(self, attrs):
-        # RN-13: un solo cobro vigente por concepto en cada trámite -> 409
-        tramite = attrs.get("tramite", getattr(self.instance, "tramite", None))
-        concepto = attrs.get("concepto", getattr(self.instance, "concepto", None))
-        repetidos = Cobro.objects.filter(tramite=tramite, concepto=concepto).exclude(
-            estado=Cobro.Estado.ANULADO
-        )
-        if self.instance:
-            repetidos = repetidos.exclude(pk=self.instance.pk)
-        if repetidos.exists():
-            raise Conflicto(f"El trámite ya tiene un cobro vigente por el concepto {concepto}.")
-        return attrs
 
 
 class RegistrarPagoSerializer(serializers.Serializer):

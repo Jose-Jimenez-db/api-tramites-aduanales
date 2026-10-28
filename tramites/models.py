@@ -23,11 +23,6 @@ class TipoPermiso(models.Model):
     aplica_a = models.CharField(max_length=12, choices=AplicaA.choices, default=AplicaA.TODAS)
     activo = models.BooleanField(default=True)
 
-    class Meta:
-        ordering = ["codigo"]
-        verbose_name = "tipo de permiso"
-        verbose_name_plural = "tipos de permiso"
-
     def __str__(self):
         return f"{self.codigo} - {self.nombre}"
 
@@ -94,12 +89,6 @@ class Tramite(models.Model):
     fecha_actualizacion = models.DateTimeField(auto_now=True)
     fecha_liberacion = models.DateTimeField(null=True, blank=True)
 
-    class Meta:
-        ordering = ["-fecha_creacion"]
-        verbose_name = "trámite"
-        verbose_name_plural = "trámites"
-        indexes = [models.Index(fields=["estado"], name="tramite_estado_idx")]
-
     def __str__(self):
         return self.codigo or f"Trámite #{self.pk}"
 
@@ -133,9 +122,6 @@ class PermisoTramite(models.Model):
     fecha_resolucion = models.DateTimeField(null=True, blank=True)
 
     class Meta:
-        ordering = ["tipo_permiso__codigo"]
-        verbose_name = "permiso del trámite"
-        verbose_name_plural = "permisos del trámite"
         constraints = [
             models.UniqueConstraint(
                 fields=["tramite", "tipo_permiso"], name="permiso_unico_por_tramite"

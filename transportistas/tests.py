@@ -1,6 +1,6 @@
 from rest_framework import status
 
-from core.pruebas import PruebaAPI, crear_transportista
+from cuentas.pruebas import PruebaAPI, crear_transportista
 
 
 class TransportistaTests(PruebaAPI):
@@ -30,7 +30,7 @@ class TransportistaTests(PruebaAPI):
         }
         r = self.client.post(self.URL, datos)
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("placa_cabezal", r.data["detalle"])
+        self.assertIn("placa_cabezal", r.data)
 
     def test_filtro_combinado_licencia_vigente_y_activo(self):
         """[FILTRO] ?licencia_vigente=true&activo=true combina dos filtros."""
@@ -40,4 +40,4 @@ class TransportistaTests(PruebaAPI):
         self.como_consulta()
         r = self.client.get(self.URL, {"licencia_vigente": "true", "activo": "true"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data["count"], 1)
+        self.assertEqual(r.data["total_registros"], 1)
