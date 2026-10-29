@@ -1,9 +1,10 @@
-from rest_framework.routers import SimpleRouter
+from django.urls import path
 
-from .views import TipoPermisoViewSet, TramiteViewSet
+from . import views
 
-router = SimpleRouter()
-router.register("tipos-permiso", TipoPermisoViewSet, basename="tipo-permiso")
-router.register("tramites", TramiteViewSet, basename="tramite")
-
-urlpatterns = router.urls
+urlpatterns = [
+    path("", views.tramites_api, name="tramites_api"),
+    path("<int:id>/", views.tramite_detalle_api, name="tramite_detalle_api"),
+    path("<int:id>/cambiar-estado/", views.tramite_cambiar_estado_api, name="tramite_cambiar_estado_api"),
+    path("<int:id>/resolver-permiso/", views.tramite_resolver_permiso_api, name="tramite_resolver_permiso_api"),
+]

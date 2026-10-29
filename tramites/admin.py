@@ -9,15 +9,16 @@ class TipoPermisoAdmin(admin.ModelAdmin):
     list_filter = ("aplica_a", "activo")
 
 
-class PermisoTramiteInline(admin.TabularInline):
-    model = PermisoTramite
-    extra = 0
-
-
 @admin.register(Tramite)
 class TramiteAdmin(admin.ModelAdmin):
     list_display = ("codigo", "carga", "tipo", "estado", "transportista", "fecha_creacion")
     list_filter = ("estado", "tipo")
     search_fields = ("codigo", "carga__numero_contenedor", "carga__cliente__nombre")
     list_select_related = ("carga", "transportista")
-    inlines = [PermisoTramiteInline]
+
+
+@admin.register(PermisoTramite)
+class PermisoTramiteAdmin(admin.ModelAdmin):
+    list_display = ("tramite", "tipo_permiso", "estado", "numero_resolucion", "fecha_resolucion")
+    list_filter = ("estado", "tipo_permiso")
+    search_fields = ("tramite__codigo", "tipo_permiso__codigo")

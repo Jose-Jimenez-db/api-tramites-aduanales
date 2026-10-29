@@ -1,7 +1,7 @@
 from rest_framework import status
 
 from cobros.models import Cobro
-from core.pruebas import (
+from cuentas.pruebas import (
     PruebaAPI,
     crear_carga,
     crear_cliente,
@@ -48,10 +48,10 @@ class TramiteCRUDTests(PruebaAPI):
             tramite = crear_tramite(transportista=crear_transportista())
             crear_cobro(tramite)
         self.como_consulta()
-        # auth (token + grupos) + count + trámites con JOIN + permisos + cobros
-        with self.assertNumQueries(6):
+        # auth (token + grupos) + count + trámites con JOIN + permisos + tipos de permiso + cobros
+        with self.assertNumQueries(7):
             r = self.client.get(self.URL)
-        self.assertEqual(r.data["count"], 5)
+        self.assertEqual(r.data["total_registros"], 5)
 
     def test_filtros_combinados_estado_y_cliente(self):
         """[FILTRO] ?estado=EN_REVISION&cliente=<id> combina filtros por campo y por relación."""
@@ -62,7 +62,7 @@ class TramiteCRUDTests(PruebaAPI):
         self.como_consulta()
         r = self.client.get(self.URL, {"estado": "EN_REVISION", "cliente": cliente.id})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data["count"], 1)
+        self.assertEqual(r.data["total_registros"], 1)
 
 
 class TramiteReglasTests(PruebaAPI):
@@ -86,7 +86,7 @@ class TramiteReglasTests(PruebaAPI):
         self.como_operador()
         r = self.client.patch(f"{self.URL}{tramite.id}/", {"transportista": vencido.id})
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("transportista", r.data["detalle"])
+        self.assertIn("transportista", r.data)
         tramite.refresh_from_db()
         self.assertIsNone(tramite.transportista_id)
 
@@ -103,7 +103,7 @@ class TramiteReglasTests(PruebaAPI):
         self.como_operador()
         r = self.cambiar(tramite, "APROBADO")
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("DUA", str(r.data["detalle"]))
+        self.assertIn("DUA", str(r.data))
 
     def test_no_se_libera_con_cobros_pendientes(self):
         """[REGLA RN-11] Liberar con un cobro pendiente -> 400."""

@@ -1,3 +1,5 @@
+import re
+
 from rest_framework import serializers
 
 from tramites.models import Tramite
@@ -15,6 +17,17 @@ class ClienteSerializer(serializers.ModelSerializer):
             "direccion", "activo", "cantidad_cargas", "fecha_registro",
         ]
         read_only_fields = ["fecha_registro"]
+
+    def validate_cedula_juridica(self, valor):
+        # RN-01: formato de cédula jurídica de Costa Rica
+        if not re.fullmatch(r"\d-\d{3}-\d{6}", valor):
+            raise serializers.ValidationError("La cédula jurídica debe tener el formato 3-101-123456.")
+        return valor
+
+    def validate_telefono(self, valor):
+        if not re.fullmatch(r"\d{4}-\d{4}", valor):
+            raise serializers.ValidationError("El teléfono debe tener el formato 2222-3333.")
+        return valor
 
     def validate_nombre(self, valor):
         valor = valor.strip()

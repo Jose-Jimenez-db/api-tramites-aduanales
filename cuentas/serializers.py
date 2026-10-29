@@ -4,7 +4,7 @@ from django.contrib.auth.password_validation import validate_password
 from django.db import transaction
 from rest_framework import serializers
 
-from core.permisos import ROLES, obtener_rol
+from .permisos import ROLES, obtener_rol
 
 Usuario = get_user_model()
 
@@ -52,7 +52,8 @@ class UsuarioSerializer(serializers.ModelSerializer):
         usuario = Usuario(**validated_data)
         usuario.set_password(password)
         usuario.save()
-        usuario.groups.set([Group.objects.get(name=rol)])
+        grupo, _ = Group.objects.get_or_create(name=rol)
+        usuario.groups.set([grupo])
         return usuario
 
     @transaction.atomic
@@ -65,7 +66,6 @@ class UsuarioSerializer(serializers.ModelSerializer):
             instance.set_password(password)
         instance.save()
         if rol:
-            instance.groups.set([Group.objects.get(name=rol)])
-            if hasattr(instance, "_rol_cache"):
-                del instance._rol_cache
+            grupo, _ = Group.objects.get_or_create(name=rol)
+            instance.groups.set([grupo])
         return instance

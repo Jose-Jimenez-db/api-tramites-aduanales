@@ -3,7 +3,7 @@ from datetime import timedelta
 from django.utils import timezone
 from rest_framework import status
 
-from core.pruebas import PruebaAPI, crear_carga, crear_cliente, crear_tramite
+from cuentas.pruebas import PruebaAPI, crear_carga, crear_cliente, crear_tramite
 
 from .models import Carga
 
@@ -47,7 +47,7 @@ class CargaCRUDTests(PruebaAPI):
         self.como_operador()
         r = self.client.post(self.URL, self.datos(numero_contenedor="msc-123"))
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("numero_contenedor", r.data["detalle"])
+        self.assertIn("numero_contenedor", r.data)
 
     def test_peso_invalido_tambien_se_rechaza_en_patch(self):
         """[REGLA RN-02] PATCH con peso mayor a 30 480 kg -> 400 (invariante en PATCH)."""
@@ -64,7 +64,7 @@ class CargaCRUDTests(PruebaAPI):
         manana = timezone.localdate() + timedelta(days=1)
         r = self.client.post(self.URL, self.datos(fecha_arribo=str(manana)))
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("fecha_arribo", r.data["detalle"])
+        self.assertIn("fecha_arribo", r.data)
 
     def test_cliente_inactivo_no_registra_cargas(self):
         """[REGLA RN-04] Cliente inactivo -> 400."""
@@ -72,7 +72,7 @@ class CargaCRUDTests(PruebaAPI):
         self.como_operador()
         r = self.client.post(self.URL, self.datos(cliente=inactivo.id))
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("cliente", r.data["detalle"])
+        self.assertIn("cliente", r.data)
 
     def test_no_se_cambia_el_cliente_de_una_carga_con_tramites(self):
         """[REGLA RN-06] PATCH cliente en carga con trámites -> 400."""
@@ -98,7 +98,7 @@ class CargaFiltrosTests(PruebaAPI):
         self.como_consulta()
         r = self.client.get(self.URL, {"tipo": "REFRIGERADA", "peso_min": "10000"})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data["count"], 1)
+        self.assertEqual(r.data["total_registros"], 1)
 
     def test_filtro_por_relacion_cedula_del_cliente(self):
         """[FILTRO POR RELACIÓN] ?cliente_cedula= busca a través de la FK."""
@@ -107,7 +107,7 @@ class CargaFiltrosTests(PruebaAPI):
         crear_carga()
         self.como_consulta()
         r = self.client.get(self.URL, {"cliente_cedula": "3-101-555555"})
-        self.assertEqual(r.data["count"], 1)
+        self.assertEqual(r.data["total_registros"], 1)
 
     def test_ordenamiento_por_peso(self):
         """[ORDENAMIENTO] ?ordenar=-peso_kg devuelve de mayor a menor."""
@@ -116,5 +116,5 @@ class CargaFiltrosTests(PruebaAPI):
         crear_carga(peso_kg="200")
         self.como_consulta()
         r = self.client.get(self.URL, {"ordenar": "-peso_kg"})
-        pesos = [fila["peso_kg"] for fila in r.data["results"]]
+        pesos = [fila["peso_kg"] for fila in r.data["resultados"]]
         self.assertEqual(pesos, ["300.00", "200.00", "100.00"])

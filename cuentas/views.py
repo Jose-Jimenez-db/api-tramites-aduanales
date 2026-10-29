@@ -1,68 +1,89 @@
 from django.contrib.auth import get_user_model
-from drf_spectacular.utils import extend_schema
-from rest_framework import status, viewsets
+from rest_framework import status
 from rest_framework.authtoken.models import Token
-from rest_framework.permissions import AllowAny, IsAuthenticated
+from rest_framework.decorators import api_view, authentication_classes
 from rest_framework.response import Response
-from rest_framework.views import APIView
 
-from core.permisos import SOLO_ADMIN, obtener_rol
-
+from .permisos import SOLO_ADMIN, TODOS, obtener_rol, validar_rol
 from .serializers import LoginSerializer, UsuarioSerializer
 
 Usuario = get_user_model()
 
 
-class LoginView(APIView):
-    """POST /api/auth/login/ -> devuelve el token del usuario."""
+@api_view(['POST'])
+@authentication_classes([])  # el login no necesita token
+def login_api(request):
+    """POST /api/auth/login/   {"username": "...", "password": "..."} -> token y rol"""
+    serializer = LoginSerializer(data=request.data)
+    if not serializer.is_valid():
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
-    permission_classes = [AllowAny]
-    authentication_classes = []
-    serializer_class = LoginSerializer
-
-    @extend_schema(request=LoginSerializer, responses={200: dict})
-    def post(self, request):
-        serializer = LoginSerializer(data=request.data)
-        serializer.is_valid(raise_exception=True)
-        usuario = serializer.validated_data["usuario"]
-        token, _ = Token.objects.get_or_create(user=usuario)
-        return Response(
-            {
-                "token": token.key,
-                "usuario": usuario.username,
-                "rol": obtener_rol(usuario),
-            },
-            status=status.HTTP_200_OK,
-        )
+    usuario = serializer.validated_data['usuario']
+    token, _ = Token.objects.get_or_create(user=usuario)
+    return Response({
+        'token': token.key,
+        'usuario': usuario.username,
+        'rol': obtener_rol(usuario)
+    })
 
 
-class LogoutView(APIView):
-    """POST /api/auth/logout/ -> elimina el token actual."""
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(request=None, responses={204: None})
-    def post(self, request):
-        Token.objects.filter(user=request.user).delete()
-        return Response(status=status.HTTP_204_NO_CONTENT)
-
-
-class PerfilView(APIView):
-    """GET /api/auth/perfil/ -> datos del usuario autenticado."""
-
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(responses=UsuarioSerializer)
-    def get(self, request):
-        return Response(UsuarioSerializer(request.user).data)
+@api_view(['POST'])
+def logout_api(request):
+    """POST /api/auth/logout/ -> elimina el token actual"""
+    error = validar_rol(request, TODOS)
+    if error:
+        return error
+    Token.objects.filter(user=request.user).delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)
 
 
-class UsuarioViewSet(viewsets.ModelViewSet):
+@api_view(['GET'])
+def perfil_api(request):
+    """GET /api/auth/perfil/ -> datos del usuario autenticado"""
+    error = validar_rol(request, TODOS)
+    if error:
+        return error
+    return Response(UsuarioSerializer(request.user).data)
+
+
+@api_view(['GET', 'POST'])
+def usuarios_api(request):
     """Administración de usuarios: solo el rol Administrador."""
+    error = validar_rol(request, SOLO_ADMIN)
+    if error:
+        return error
 
-    queryset = Usuario.objects.prefetch_related("groups").order_by("username")
-    serializer_class = UsuarioSerializer
-    roles_por_metodo = {metodo: SOLO_ADMIN for metodo in ("GET", "HEAD", "OPTIONS", "POST", "PUT", "PATCH", "DELETE")}
-    search_fields = ["username", "first_name", "last_name", "email"]
-    ordering_fields = ["username", "date_joined"]
-    filterset_fields = ["is_active"]
+    if request.method == 'GET':
+        usuarios = Usuario.objects.order_by('username')
+        return Response(UsuarioSerializer(usuarios, many=True).data)
+
+    serializer = UsuarioSerializer(data=request.data)
+    if serializer.is_valid():
+        serializer.save()
+        return Response(serializer.data, status=status.HTTP_201_CREATED)
+    return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+
+@api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
+def usuario_detalle_api(request, id):
+    error = validar_rol(request, SOLO_ADMIN)
+    if error:
+        return error
+
+    try:
+        usuario = Usuario.objects.get(id=id)
+    except Usuario.DoesNotExist:
+        return Response({'error': 'Usuario no encontrado.'}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == 'GET':
+        return Response(UsuarioSerializer(usuario).data)
+
+    if request.method in ['PUT', 'PATCH']:
+        serializer = UsuarioSerializer(usuario, data=request.data, partial=request.method == 'PATCH')
+        if serializer.is_valid():
+            serializer.save()
+            return Response(serializer.data)
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
+
+    usuario.delete()
+    return Response(status=status.HTTP_204_NO_CONTENT)

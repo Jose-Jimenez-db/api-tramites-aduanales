@@ -1,6 +1,6 @@
 from rest_framework import status
 
-from core.pruebas import PruebaAPI, crear_carga, crear_cliente, crear_tramite
+from cuentas.pruebas import PruebaAPI, crear_carga, crear_cliente, crear_tramite
 from tramites.models import Tramite
 
 from .models import Cliente
@@ -27,15 +27,15 @@ class ClienteCRUDTests(PruebaAPI):
         self.assertTrue(Cliente.objects.filter(cedula_juridica="3-101-777777").exists())
 
     def test_listar_clientes_paginado(self):
-        """[CRUD][PAGINACIÓN] Listar -> 200 con count/next/results y tamaño de página."""
-        for _ in range(3):
+        """[CRUD][PAGINACIÓN] Listar -> 200 con 5 resultados por página."""
+        for _ in range(6):
             crear_cliente()
         self.como_consulta()
-        r = self.client.get(self.URL, {"tamano": 2})
+        r = self.client.get(self.URL, {"page": 1})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data["count"], 3)
-        self.assertEqual(len(r.data["results"]), 2)
-        self.assertIsNotNone(r.data["next"])
+        self.assertEqual(r.data["total_registros"], 6)
+        self.assertEqual(len(r.data["resultados"]), 5)
+        self.assertEqual(r.data["total_paginas"], 2)
 
     def test_actualizar_cliente_con_put(self):
         """[CRUD] Actualizar con PUT -> 200."""
@@ -59,7 +59,7 @@ class ClienteCRUDTests(PruebaAPI):
         self.como_consulta()
         r = self.client.get(f"{self.URL}99999/")
         self.assertEqual(r.status_code, status.HTTP_404_NOT_FOUND)
-        self.assertEqual(r.data["codigo"], "no_encontrado")
+        self.assertIn("error", r.data)
 
     def test_busqueda_por_nombre(self):
         """[BÚSQUEDA] ?buscar= filtra por nombre."""
@@ -67,8 +67,16 @@ class ClienteCRUDTests(PruebaAPI):
         crear_cliente(nombre="Repuestos Central")
         self.como_consulta()
         r = self.client.get(self.URL, {"buscar": "frutas"})
-        self.assertEqual(r.data["count"], 1)
-        self.assertEqual(r.data["results"][0]["nombre"], "Frutas del Pacífico")
+        self.assertEqual(r.data["total_registros"], 1)
+        self.assertEqual(r.data["resultados"][0]["nombre"], "Frutas del Pacífico")
+
+
+    def test_filtro_con_valor_invalido_devuelve_400(self):
+        """[FILTRO][VALIDACIÓN] ?activo=quizas no es true/false -> 400."""
+        self.como_consulta()
+        r = self.client.get(self.URL, {"activo": "quizas"})
+        self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
+        self.assertIn("activo", r.data)
 
 
 class ClienteReglasTests(PruebaAPI):
@@ -80,7 +88,7 @@ class ClienteReglasTests(PruebaAPI):
         datos = {"cedula_juridica": "3101123", "nombre": "Cliente X", "correo": "x@x.test", "telefono": "2222-3333"}
         r = self.client.post(self.URL, datos)
         self.assertEqual(r.status_code, status.HTTP_400_BAD_REQUEST)
-        self.assertIn("cedula_juridica", r.data["detalle"])
+        self.assertIn("cedula_juridica", r.data)
 
     def test_cedula_duplicada_devuelve_400(self):
         """[REGLA RN-01] Cédula jurídica repetida -> 400."""

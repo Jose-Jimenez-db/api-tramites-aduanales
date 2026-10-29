@@ -8,8 +8,8 @@ Backend REST para una **agencia aduanal que trabaja en Puerto Caldera**. Control
 
 | Integrante | Carné | Responsabilidades principales |
 |---|---|---|
-| José David Jiménez Araya | C5G177 | Configuración, modelos de cargas/trámites/cobros, API de clientes/transportistas/cargas, reportes ORM, pruebas de trámites/cobros y colección Postman |
-| Yerlin Oviedo Castro | C5I097 | Modelos de clientes/transportistas, seguridad (tokens y roles), API de trámites/cobros y reglas de negocio, pruebas de clientes/cargas/cuentas, documentación |
+| José David Jiménez Araya | C5G177 | Configuración, modelos de cargas/trámites/cobros, API de trámites/cobros y reglas de negocio, reportes ORM, pruebas de trámites/cobros y colección Postman |
+| Yerlin Oviedo Castro | C5I097 | Modelos de clientes/transportistas, seguridad (tokens y roles), API de clientes/transportistas/cargas con filtros y paginación, pruebas de clientes/cargas/cuentas, documentación |
 
 Cada pull request fue revisado por la otra persona antes de unirse a `main`.
 
@@ -48,7 +48,8 @@ El detalle completo está en [`docs/DOCUMENTO_TECNICO.md`](docs/DOCUMENTO_TECNIC
 - Python 3.11 o superior (probado con 3.13)
 - Django 5.2 LTS y Django REST Framework 3.18
 - MySQL 8
-- django-filter (filtros), drf-spectacular (documentación Swagger)
+- Vistas basadas en funciones con `@api_view` y rutas con `path()` (sin routers ni ViewSets)
+- Paginación con el `Paginator` de Django y filtros leídos de `request.query_params`, igual que en el proyecto de clase
 - PyMySQL como conector (no necesita compilar nada en Windows)
 
 ## 4. Instalación desde cero
@@ -122,7 +123,6 @@ python manage.py runserver
 ```
 
 - API: <http://127.0.0.1:8000/api/>
-- Documentación interactiva (Swagger): <http://127.0.0.1:8000/api/docs/>
 - Panel de administración: <http://127.0.0.1:8000/admin/>
 
 ## 5. Cómo autenticarse
@@ -152,7 +152,7 @@ Authorization: Token 9f3c...
 python manage.py test
 ```
 
-Hay **61 pruebas** que cubren CRUD, reglas de negocio, permisos (401/403), filtros, paginación y consultas ORM. Para ver el nombre de cada prueba:
+Hay **62 pruebas** que cubren CRUD, reglas de negocio, permisos (401/403), filtros, paginación y consultas ORM. Para ver el nombre de cada prueba:
 
 ```bash
 python manage.py test -v 2
@@ -167,10 +167,10 @@ python manage.py test -v 2 > docs/evidencia_pruebas.txt 2>&1
 | Requisito del enunciado | Mínimo | En el proyecto |
 |---|---|---|
 | Pruebas CRUD | 5 | 11 |
-| Reglas de negocio y validaciones | 4 | 31 |
+| Reglas de negocio y validaciones | 4 | 32 |
 | Permisos y seguridad (401/403) | 3 | 12 |
-| Paginación, filtros, búsqueda u orden | 1 | 10 |
-| **Total de pruebas** | **15** | **61** |
+| Paginación, filtros, búsqueda u orden | 1 | 11 |
+| **Total de pruebas** | **15** | **62** |
 
 Cada prueba indica su categoría al inicio de su descripción, por ejemplo `[REGLA RN-07]`. Algunas pruebas cubren dos categorías.
 
@@ -178,7 +178,7 @@ Cada prueba indica su categoría al inicio de su descripción, por ejemplo `[REG
 
 En la carpeta `postman/`:
 
-- `aduana_api.postman_collection.json`: 59 solicitudes en 10 carpetas, cada una con rol, respuesta esperada, ejemplo de respuesta y pruebas automáticas.
+- `aduana_api.postman_collection.json`: 60 solicitudes en 10 carpetas, cada una con rol, respuesta esperada, ejemplo de respuesta y pruebas automáticas.
 - `aduana_local.postman_environment.json`: variables de entorno de ejemplo.
 
 Pasos:
@@ -199,9 +199,8 @@ npx newman run postman/aduana_api.postman_collection.json -e postman/aduana_loca
 ## 8. Estructura del proyecto
 
 ```
-├── config/            Configuración de Django (settings, urls)
-├── core/              Código compartido: permisos por rol, paginación, errores, utilidades de pruebas
-├── cuentas/           Login, logout, perfil, usuarios, roles y comando cargar_datos
+├── config_backend/    Proyecto creado con startproject: configuración (settings, urls)
+├── cuentas/           Login, logout, perfil, usuarios, roles (permisos.py), datos de prueba (pruebas.py) y comando cargar_datos
 ├── clientes/          Módulo 1
 ├── transportistas/    Módulo 2
 ├── cargas/            Módulo 3
@@ -212,11 +211,17 @@ npx newman run postman/aduana_api.postman_collection.json -e postman/aduana_loca
 └── postman/           Colección y entorno
 ```
 
-Cada solicitud sigue el flujo: **URL → vista → serializador (valida datos) → servicio (reglas) → ORM → respuesta JSON**.
+Cada solicitud sigue el flujo: **URL (`path()`) → vista (`@api_view`) → serializador (valida datos) → servicio (reglas) → ORM → respuesta JSON**.
+
+Los listados se paginan con el `Paginator` de Django, 5 registros por página (`?page=2`):
+
+```json
+{"pagina_actual": 2, "total_paginas": 3, "total_registros": 25, "resultados": [ ... ]}
+```
 
 ## 9. Limitaciones conocidas
 
-- No hay frontend; la API se usa con Postman o Swagger (así lo indica el enunciado).
+- No hay frontend; la API se usa con Postman (así lo indica el enunciado).
 - Los permisos de instituciones (DUA, SFE, Ministerio de Salud…) se registran manualmente; no hay conexión real con TICA ni con otros sistemas del gobierno.
 - Los montos se manejan en colones y no se calculan impuestos automáticamente.
 - El código de trámite usa el año de creación en hora UTC; un trámite creado entre las 6 p. m. y medianoche del 31 de diciembre quedaría con el año siguiente.

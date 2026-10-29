@@ -1,7 +1,7 @@
 from rest_framework import status
 
 from cobros.models import Cobro
-from core.pruebas import (
+from cuentas.pruebas import (
     PruebaAPI,
     crear_carga,
     crear_cliente,

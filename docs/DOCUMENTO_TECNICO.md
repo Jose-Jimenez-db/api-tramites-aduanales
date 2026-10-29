@@ -84,6 +84,7 @@ erDiagram
         date vencimiento_licencia
         varchar placa_cabezal UK
         bool activo
+        datetime fecha_registro
     }
     CARGA {
         bigint id PK
@@ -94,6 +95,7 @@ erDiagram
         decimal peso_kg
         varchar buque
         date fecha_arribo
+        datetime fecha_registro
     }
     TRAMITE {
         bigint id PK
@@ -101,11 +103,12 @@ erDiagram
         bigint carga_id FK
         bigint transportista_id FK "nullable"
         varchar tipo
-        varchar estado "indexado"
+        varchar estado
         text observaciones
         int creado_por_id FK "nullable"
         datetime fecha_creacion
-        datetime fecha_liberacion
+        datetime fecha_actualizacion
+        datetime fecha_liberacion "nullable"
     }
     TIPO_PERMISO {
         bigint id PK
@@ -117,11 +120,11 @@ erDiagram
     }
     PERMISO_TRAMITE {
         bigint id PK
-        bigint tramite_id FK
+        bigint tramite_id FK "UK junto con tipo_permiso_id"
         bigint tipo_permiso_id FK
         varchar estado
         varchar numero_resolucion
-        datetime fecha_resolucion
+        datetime fecha_resolucion "nullable"
     }
     COBRO {
         bigint id PK
@@ -132,10 +135,18 @@ erDiagram
         varchar estado
         varchar metodo_pago
         datetime fecha_emision
-        datetime fecha_pago
+        datetime fecha_pago "nullable"
         int registrado_por_id FK "nullable"
     }
+    USUARIO {
+        int id PK
+        varchar username UK
+        varchar password
+        varchar email
+    }
 ```
+
+El mismo diagrama como imagen: [`docs/diagrama_er.png`](diagrama_er.png).
 
 **Relaciones exigidas por RF-03**
 
@@ -151,8 +162,7 @@ erDiagram
 | `UNIQUE` número de contenedor | Carga | El contenedor es único a nivel mundial (ISO 6346) |
 | `UNIQUE` código | Trámite, TipoPermiso | Identificadores legibles |
 | `UNIQUE` número de factura | Cobro | Respaldo contable |
-| `UNIQUE (tramite, tipo_permiso)` | PermisoTramite | Un permiso no se repite en el mismo trámite |
-| Índice en `estado` | Trámite | Casi todos los filtros y reportes usan el estado |
+| `UniqueConstraint (tramite, tipo_permiso)` en `class Meta` | PermisoTramite | Un permiso no se repite en el mismo trámite (igual que `Inscripcion` en el proyecto de clase) |
 
 | Relación | `on_delete` | Justificación |
 |---|---|---|
@@ -166,25 +176,25 @@ erDiagram
 
 ## 6. Reglas de negocio
 
-Todas devuelven un error con el formato estándar (sección 9). Las marcadas con **PATCH** se validan también en actualizaciones parciales.
+Todas devuelven el código indicado con un mensaje (sección 9). Las marcadas con **PATCH** se validan también en actualizaciones parciales. Todas las validaciones están en los serializadores (métodos `validate_<campo>` y `validate()`), igual que en el proyecto de clase.
 
 | ID | Regla | Código | Dónde se valida | Prueba automatizada |
 |---|---|---|---|---|
-| RN-01 | Cédula jurídica con formato `3-101-123456`, teléfono `2222-3333`, sin duplicados | 400 | `clientes/models.py` | `test_cedula_con_formato_invalido_devuelve_400`, `test_cedula_duplicada_devuelve_400` |
-| RN-02 | Contenedor ISO 6346 (4 letras + 7 dígitos) y peso entre 0,01 y 30 480 kg (**PATCH**) | 400 | `cargas/models.py` | `test_contenedor_con_formato_invalido_devuelve_400`, `test_peso_invalido_tambien_se_rechaza_en_patch` |
+| RN-01 | Cédula jurídica con formato `3-101-123456`, teléfono `2222-3333`, sin duplicados | 400 | `clientes/serializers.py` | `test_cedula_con_formato_invalido_devuelve_400`, `test_cedula_duplicada_devuelve_400` |
+| RN-02 | Contenedor ISO 6346 (4 letras + 7 dígitos) y peso entre 0,01 y 30 480 kg (**PATCH**) | 400 | `cargas/serializers.py` | `test_contenedor_con_formato_invalido_devuelve_400`, `test_peso_invalido_tambien_se_rechaza_en_patch` |
 | RN-03 | La fecha de arribo no puede ser futura | 400 | `cargas/serializers.py` | `test_fecha_de_arribo_futura_devuelve_400` |
 | RN-04 | Un cliente inactivo no puede registrar cargas | 400 | `cargas/serializers.py` | `test_cliente_inactivo_no_registra_cargas` |
 | RN-05 | No se desactiva un cliente con trámites activos (**PATCH**) | 400 | `clientes/serializers.py` | `test_no_se_desactiva_cliente_con_tramites_activos_por_patch` |
 | RN-06 | Una carga con trámites no cambia de cliente (**PATCH**) | 400 | `cargas/serializers.py` | `test_no_se_cambia_el_cliente_de_una_carga_con_tramites` |
-| RN-07 | Una carga solo puede tener un trámite activo | 409 | `tramites/serializers.py` | `test_carga_con_tramite_activo_devuelve_409` |
+| RN-07 | Una carga solo puede tener un trámite activo | 409 | `tramites/views.py`, `tramites/servicios.py` | `test_carga_con_tramite_activo_devuelve_409` |
 | RN-08 | Solo se asigna un transportista activo y con licencia vigente (**PATCH**) | 400 | `tramites/serializers.py` | `test_transportista_con_licencia_vencida_se_rechaza_en_patch` |
 | RN-09 | Transiciones de estado permitidas: REGISTRADO → EN_REVISION → APROBADO → LIBERADO; CANCELADO desde cualquier estado abierto | 400 | `tramites/servicios.py` | `test_transicion_de_estado_invalida_devuelve_400` |
 | RN-10 | Para aprobar, todos los permisos del trámite deben estar aprobados | 400 | `tramites/servicios.py` | `test_no_se_aprueba_con_permisos_pendientes` |
 | RN-11 | Para liberar: transportista vigente, al menos un cobro y todos los cobros pagados | 400 | `tramites/servicios.py` | `test_no_se_libera_con_cobros_pendientes` |
 | RN-12 | Un trámite liberado o cancelado no se modifica; solo se eliminan trámites REGISTRADOS (**PATCH**) | 409 | `tramites/views.py` | `test_tramite_liberado_no_se_modifica`, `test_solo_se_eliminan_tramites_registrados` |
-| RN-13 | Cobro con monto > 0, no en trámites cerrados, y un solo cobro vigente por concepto | 400 / 409 | `cobros/models.py`, `cobros/serializers.py` | `test_monto_cero_devuelve_400`, `test_no_se_cobra_en_tramite_cerrado`, `test_concepto_duplicado_devuelve_409` |
+| RN-13 | Cobro con monto > 0, no en trámites cerrados, y un solo cobro vigente por concepto | 400 / 409 | `cobros/serializers.py`, `cobros/views.py` | `test_monto_cero_devuelve_400`, `test_no_se_cobra_en_tramite_cerrado`, `test_concepto_duplicado_devuelve_409` |
 | RN-14 | Un cobro pagado o anulado no se modifica ni se elimina (**PATCH**) | 409 | `cobros/views.py` | `test_cobro_pagado_no_se_modifica_ni_con_patch` |
-| RN-15 | Los permisos se resuelven solo con el trámite EN_REVISION; aprobar exige número de resolución | 400 | `tramites/servicios.py` | `test_aprobar_permiso_exige_numero_de_resolucion` |
+| RN-15 | Los permisos se resuelven solo con el trámite EN_REVISION; aprobar exige número de resolución | 400 | `tramites/serializers.py`, `tramites/views.py` | `test_aprobar_permiso_exige_numero_de_resolucion` |
 
 **Campos protegidos:** `estado` del trámite y del cobro, `codigo`, `numero_factura` y fechas automáticas son de solo lectura. Aunque se envíen en un PATCH, se ignoran (`test_estado_no_se_puede_cambiar_con_patch`). El estado solo cambia con las acciones `cambiar-estado`, `registrar-pago` y `anular`, que aplican las reglas.
 
@@ -195,17 +205,17 @@ Todas devuelven un error con el formato estándar (sección 9). Las marcadas con
 | Asignar los permisos que exige el tipo de carga | Al crear un trámite | `tramites/servicios.py · asignar_permisos_requeridos` |
 | Generar el código `TR-AAAA-NNNNN` | Al crear un trámite | `tramites/models.py · save` |
 | Generar el número de factura `FAC-NNNNNN` | Al crear un cobro | `cobros/models.py · save` |
-| Bloquear aprobación o liberación si no se cumplen las condiciones | Al cambiar de estado | `tramites/servicios.py · cambiar_estado` |
+| Bloquear aprobación o liberación si no se cumplen las condiciones | Al cambiar de estado | `tramites/servicios.py · validar_cambio_estado` |
 | Registrar la fecha de liberación | Al liberar | `tramites/servicios.py · cambiar_estado` |
 | Anular los cobros pendientes | Al cancelar un trámite | `tramites/servicios.py · cambiar_estado` |
-| Registrar la fecha de pago | Al registrar un pago | `cobros/views.py · registrar_pago` |
+| Registrar la fecha de pago | Al registrar un pago | `cobros/views.py · cobro_registrar_pago_api` |
 | Calcular si la licencia está vigente | En cada consulta | `transportistas/models.py · licencia_vigente` |
 
 ## 8. Seguridad: autenticación y matriz de permisos
 
 - **Autenticación por token** (`rest_framework.authtoken`). Se obtiene en `POST /api/auth/login/` y se envía como `Authorization: Token <token>`.
-- **Roles** = grupos de Django creados por la migración `cuentas/0001_crear_roles.py`.
-- **Permiso por operación**: la clase `core/permisos.py · PermisoPorRol` revisa el rol contra el método HTTP o la acción.
+- **Roles** = grupos de Django (`Group`): Administrador, Operador y Consulta. Se crean con `get_or_create` al asignarlos a un usuario (`cargar_datos` o `POST /api/auth/usuarios/`).
+- **Permiso por operación**: al inicio de cada vista se llama a `validar_rol(request)` (usa la matriz según el método HTTP) o a `validar_rol(request, ROLES)` para acciones especiales. Está en `cuentas/permisos.py`. Si el usuario no cumple, la vista devuelve 401 o 403.
 - Sin token o con token inválido → **401**. Con token pero sin permiso → **403**.
 
 | Recurso / acción | Administrador | Operador | Consulta | Sin token |
@@ -235,35 +245,22 @@ Todas devuelven un error con el formato estándar (sección 9). Las marcadas con
 | 403 | El rol no tiene permiso |
 | 404 | El registro o la ruta no existe |
 | 409 | Conflicto con el estado de los datos: duplicado lógico, registro cerrado o borrado protegido (`PROTECT`) |
-| 500 | Error no previsto: se registra en el servidor y se responde sin trazas |
 
-Todos los errores tienen la misma forma (`core/excepciones.py`):
+Formato de las respuestas de error (el mismo estilo del proyecto de clase):
 
-```json
-{
-  "estado": 409,
-  "codigo": "conflicto",
-  "mensaje": "La carga MSCU1000001 ya tiene un trámite activo (TR-2026-00001).",
-  "detalle": null
-}
-```
+| Código | Respuesta |
+|---|---|
+| 400 por datos inválidos | Los errores del serializador por campo: `{"peso_kg": ["El peso no puede superar 30 480 kg."]}` |
+| 400 por un filtro inválido | `{"activo": "Utilice true o false."}` |
+| 400 / 409 por una regla de negocio | `{"error": "La carga MSCU1000001 ya tiene un trámite activo (TR-2026-00001)."}` |
+| 401 / 403 | `{"detail": "Su rol no tiene permiso para realizar esta operación."}` |
+| 404 | `{"error": "Cliente no encontrado."}` |
 
-En los errores 400, `detalle` indica el campo:
-
-```json
-{
-  "estado": 400,
-  "codigo": "datos_invalidos",
-  "mensaje": "Los datos enviados no son válidos.",
-  "detalle": {"peso_kg": ["El peso no puede superar 30 480 kg."]}
-}
-```
-
-Con `DJANGO_DEBUG=False`, las rutas inexistentes y los errores 500 también responden en JSON (`core/vistas.py`).
+Los borrados protegidos (`on_delete=PROTECT`) se atrapan con `try/except ProtectedError` en la vista y responden 409. Con `DJANGO_DEBUG=False` (como debe estar en producción) Django nunca muestra trazas internas.
 
 ## 10. Catálogo de endpoints
 
-Base: `http://127.0.0.1:8000`. Documentación interactiva: `/api/docs/` (Swagger) y `/api/esquema/` (OpenAPI).
+Base: `http://127.0.0.1:8000`. Todas las rutas se definen con `path()` en el `urls.py` de cada módulo y se incluyen en `config_backend/urls.py` con `include()`. Los listados paginados responden con `pagina_actual`, `total_paginas`, `total_registros` y `resultados`.
 
 ### Autenticación y usuarios
 
@@ -279,35 +276,35 @@ Base: `http://127.0.0.1:8000`. Documentación interactiva: `/api/docs/` (Swagger
 
 | Método | Ruta | Parámetros de consulta |
 |---|---|---|
-| GET, POST | `/api/clientes/` | `activo`, `buscar` (nombre, cédula, correo), `ordenar` (nombre, fecha_registro, cantidad_cargas), `pagina`, `tamano` |
+| GET, POST | `/api/clientes/` | `activo`, `buscar` (nombre, cédula, correo), `page` |
 | GET, PUT, PATCH, DELETE | `/api/clientes/{id}/` | |
 
 ### Transportistas
 
 | Método | Ruta | Parámetros de consulta |
 |---|---|---|
-| GET, POST | `/api/transportistas/` | `activo`, `licencia_vigente`, `vence_antes`, `buscar`, `ordenar`, `pagina`, `tamano` |
+| GET, POST | `/api/transportistas/` | `activo`, `licencia_vigente`, `page` |
 | GET, PUT, PATCH, DELETE | `/api/transportistas/{id}/` | |
 
 ### Cargas
 
 | Método | Ruta | Parámetros de consulta |
 |---|---|---|
-| GET, POST | `/api/cargas/` | `cliente`, `tipo`, `arribo_desde`, `arribo_hasta`, `peso_min`, `peso_max`, `cliente_cedula`, `sin_tramite_activo`, `buscar`, `ordenar`, `pagina`, `tamano` |
+| GET, POST | `/api/cargas/` | `cliente`, `tipo`, `peso_min`, `cliente_cedula`, `buscar`, `ordenar` (fecha_arribo, peso_kg, numero_contenedor), `page` |
 | GET, PUT, PATCH, DELETE | `/api/cargas/{id}/` | |
 
 ### Catálogo de permisos
 
 | Método | Ruta | Parámetros de consulta |
 |---|---|---|
-| GET, POST | `/api/tipos-permiso/` | `aplica_a`, `activo`, `buscar`, `ordenar` |
+| GET, POST | `/api/tipos-permiso/` | (lista completa, sin paginar) |
 | GET, PUT, PATCH, DELETE | `/api/tipos-permiso/{id}/` | |
 
 ### Trámites
 
 | Método | Ruta | Parámetros / cuerpo |
 |---|---|---|
-| GET, POST | `/api/tramites/` | `estado`, `tipo`, `transportista`, `cliente`, `tipo_carga`, `contenedor`, `creado_desde`, `creado_hasta`, `con_cobros_pendientes`, `buscar`, `ordenar`, `pagina`, `tamano` |
+| GET, POST | `/api/tramites/` | `estado`, `tipo`, `cliente`, `transportista`, `buscar`, `page` |
 | GET, PUT, PATCH, DELETE | `/api/tramites/{id}/` | |
 | POST | `/api/tramites/{id}/cambiar-estado/` | `{"estado": "EN_REVISION"}` |
 | POST | `/api/tramites/{id}/resolver-permiso/` | `{"permiso": 3, "estado": "APROBADO", "numero_resolucion": "DGA-2026-1"}` |
@@ -316,7 +313,7 @@ Base: `http://127.0.0.1:8000`. Documentación interactiva: `/api/docs/` (Swagger
 
 | Método | Ruta | Parámetros / cuerpo |
 |---|---|---|
-| GET, POST | `/api/cobros/` | `estado`, `concepto`, `tramite`, `metodo_pago`, `cliente`, `monto_min`, `monto_max`, `buscar`, `ordenar`, `pagina`, `tamano` |
+| GET, POST | `/api/cobros/` | `estado`, `concepto`, `tramite`, `cliente`, `ordenar` (fecha_emision, monto, fecha_pago), `page` |
 | GET, PUT, PATCH, DELETE | `/api/cobros/{id}/` | |
 | POST | `/api/cobros/{id}/registrar-pago/` | `{"metodo_pago": "TRANSFERENCIA"}` |
 | POST | `/api/cobros/{id}/anular/` | sin cuerpo |
@@ -332,7 +329,7 @@ Base: `http://127.0.0.1:8000`. Documentación interactiva: `/api/docs/` (Swagger
 | `/api/reportes/ingresos/` | `desde`, `hasta` (AAAA-MM-DD) |
 | `/api/reportes/permisos-pendientes/` | |
 
-**Cumplimiento de RF-05:** filtros combinables en cargas, trámites, cobros y transportistas; búsqueda y ordenamiento en todos los listados de los módulos; paginación global (`pagina`, `tamano`, máximo 100).
+**Cumplimiento de RF-05:** filtros combinables en cargas, trámites, cobros y transportistas, leídos de `request.query_params` dentro de cada vista (un valor inválido devuelve 400); búsqueda (`buscar`) en clientes, cargas y trámites; ordenamiento (`ordenar`) en cargas y cobros; paginación con el `Paginator` de Django (5 por página, `?page=`) en todos los listados de los módulos.
 
 **Cumplimiento de RF-02:** los cinco módulos tienen CRUD completo. Las únicas restricciones son de negocio: un trámite solo se elimina en estado REGISTRADO y un cobro solo se elimina si está PENDIENTE.
 
@@ -348,26 +345,26 @@ Están en `reportes/consultas.py` y en los `queryset` de las vistas.
 | Q4 | Licencias por vencer con trámites activos asignados | Rango de fechas + `Count` condicional |
 | Q5 | Ingresos por concepto en un rango de fechas | `filter` + `values().annotate(Sum, Count)` + `aggregate` |
 | Q6 | Permisos pendientes por institución | `values("tipo_permiso__institucion")` (campo de otra tabla) + `Count(distinct)` |
-| Q7 | Listado de trámites | `select_related("carga__cliente", "transportista", "creado_por")` + `prefetch_related(Prefetch("permisos_tramite", ...), "cobros")` |
+| Q7 | Listado de trámites | `select_related("carga__cliente", "transportista", "creado_por")` + `prefetch_related("permisos_tramite__tipo_permiso", "cobros")` |
 | Q8 | Listado de clientes con cantidad de cargas | `annotate(Count("cargas"))` y ordenamiento por ese valor |
 
-La prueba `test_listado_usa_select_y_prefetch_related` comprueba que el listado de trámites hace **6 consultas** sin importar cuántos trámites haya (sin `select_related`/`prefetch_related` habría varias consultas extra por cada trámite: carga, cliente, transportista, permisos y cobros).
+La prueba `test_listado_usa_select_y_prefetch_related` comprueba que el listado de trámites hace **7 consultas** sin importar cuántos trámites haya (sin `select_related`/`prefetch_related` habría varias consultas extra por cada trámite: carga, cliente, transportista, permisos y cobros).
 
 ## 12. Flujo de una solicitud
 
 Ejemplo: `POST /api/tramites/5/cambiar-estado/` con `{"estado": "LIBERADO"}`.
 
-1. **URL** (`tramites/urls.py`): el router envía la solicitud a `TramiteViewSet.cambiar_estado`.
+1. **URL** (`tramites/urls.py`): `path("<int:id>/cambiar-estado/", ...)` envía la solicitud a la vista `tramite_cambiar_estado_api`.
 2. **Autenticación**: `TokenAuthentication` identifica al usuario por el token (si falta → 401).
-3. **Permiso** (`core/permisos.py`): el rol debe ser Administrador u Operador (si no → 403).
-4. **Vista** (`tramites/views.py`): busca el trámite con `get_object()` (si no existe → 404).
+3. **Permiso** (`cuentas/permisos.py`): la vista llama a `validar_rol(request, ESCRITURA)`; el rol debe ser Administrador u Operador (si no → 403).
+4. **Vista** (`tramites/views.py`): busca el trámite con `Tramite.objects...get(id=id)`; si lanza `DoesNotExist` responde 404.
 5. **Serializador** (`CambiarEstadoSerializer`): valida que el estado sea uno de los permitidos (si no → 400).
-6. **Servicio** (`tramites/servicios.py · cambiar_estado`): aplica RN-09 y RN-11 consultando transportista y cobros.
+6. **Servicio** (`tramites/servicios.py`): `validar_cambio_estado` revisa RN-09 y RN-11 consultando transportista y cobros; si algo falla, la vista responde 400 o 409 con el motivo. Si todo está bien, `cambiar_estado` guarda el cambio.
 7. **ORM**: guarda el nuevo estado y la fecha de liberación dentro de una transacción.
 8. **Respuesta**: la vista vuelve a leer el trámite con `select_related`/`prefetch_related` y lo devuelve con `TramiteSerializer` (200).
 
 ## 13. Pruebas
 
-- **61 pruebas automatizadas** (`python manage.py test`), distribuidas en los 7 módulos. Cada una indica su categoría en la descripción: `[CRUD]`, `[REGLA RN-xx]`, `[PERMISO]`, `[FILTRO]`, `[PAGINACIÓN]`, `[ORM]`, etc.
-- **Colección Postman** con 59 solicitudes y 158 verificaciones automáticas, organizada como el recorrido completo de un trámite.
+- **62 pruebas automatizadas** (`python manage.py test`), distribuidas en los 7 módulos. Cada una indica su categoría en la descripción: `[CRUD]`, `[REGLA RN-xx]`, `[PERMISO]`, `[FILTRO]`, `[PAGINACIÓN]`, `[ORM]`, etc.
+- **Colección Postman** con 60 solicitudes y 149 verificaciones automáticas, organizada como el recorrido completo de un trámite.
 - Las pruebas crean sus propios datos (no dependen de `cargar_datos`) y no contienen contraseñas reales: los usuarios se autentican con tokens creados en la prueba.

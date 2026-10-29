@@ -1,13 +1,11 @@
 from django.urls import path
-from rest_framework.routers import SimpleRouter
 
-from .views import LoginView, LogoutView, PerfilView, UsuarioViewSet
-
-router = SimpleRouter()
-router.register("usuarios", UsuarioViewSet, basename="usuario")
+from . import views
 
 urlpatterns = [
-    path("login/", LoginView.as_view(), name="login"),
-    path("logout/", LogoutView.as_view(), name="logout"),
-    path("perfil/", PerfilView.as_view(), name="perfil"),
-] + router.urls
+    path("login/", views.login_api, name="login_api"),
+    path("logout/", views.logout_api, name="logout_api"),
+    path("perfil/", views.perfil_api, name="perfil_api"),
+    path("usuarios/", views.usuarios_api, name="usuarios_api"),
+    path("usuarios/<int:id>/", views.usuario_detalle_api, name="usuario_detalle_api"),
+]

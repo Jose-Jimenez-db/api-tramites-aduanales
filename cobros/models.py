@@ -1,7 +1,4 @@
-from decimal import Decimal
-
 from django.conf import settings
-from django.core.validators import MinValueValidator
 from django.db import models
 
 from tramites.models import Tramite
@@ -34,11 +31,7 @@ class Cobro(models.Model):
     # PROTECT: un trámite con cobros no se puede borrar (respaldo contable).
     tramite = models.ForeignKey(Tramite, on_delete=models.PROTECT, related_name="cobros")
     concepto = models.CharField(max_length=15, choices=Concepto.choices)
-    monto = models.DecimalField(
-        max_digits=12,
-        decimal_places=2,
-        validators=[MinValueValidator(Decimal("0.01"), "El monto debe ser mayor que 0.")],
-    )
+    monto = models.DecimalField(max_digits=12, decimal_places=2)
     estado = models.CharField(max_length=10, choices=Estado.choices, default=Estado.PENDIENTE)
     metodo_pago = models.CharField(max_length=15, choices=MetodoPago.choices, blank=True)
     fecha_emision = models.DateTimeField(auto_now_add=True)
@@ -51,11 +44,6 @@ class Cobro(models.Model):
         blank=True,
         related_name="cobros_registrados",
     )
-
-    class Meta:
-        ordering = ["-fecha_emision"]
-        verbose_name = "cobro"
-        verbose_name_plural = "cobros"
 
     def __str__(self):
         return f"{self.numero_factura or 'Cobro'} - {self.concepto} ₡{self.monto}"

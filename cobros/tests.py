@@ -1,6 +1,6 @@
 from rest_framework import status
 
-from core.pruebas import PruebaAPI, crear_cobro, crear_tramite
+from cuentas.pruebas import PruebaAPI, crear_cobro, crear_tramite
 from tramites.models import Tramite
 
 from .models import Cobro
@@ -76,13 +76,17 @@ class CobroTests(PruebaAPI):
         self.assertEqual(self.client.post(f"{self.URL}{cobro.id}/anular/").status_code, status.HTTP_200_OK)
 
     def test_paginacion_y_filtro_por_estado(self):
-        """[PAGINACIÓN][FILTRO] ?estado=PENDIENTE&tamano=2&pagina=2."""
-        for concepto in ("ALMACENAJE", "DESALMACENAJE", "TRANSPORTE"):
+        """[PAGINACIÓN][FILTRO] ?estado=PENDIENTE&page=2 (5 cobros por página)."""
+        otro = crear_tramite(estado=Tramite.Estado.EN_REVISION)
+        for concepto in ("ALMACENAJE", "DESALMACENAJE", "TRANSPORTE", "IMPUESTOS"):
             crear_cobro(self.tramite, concepto=concepto)
+        for concepto in ("ALMACENAJE", "TRANSPORTE"):
+            crear_cobro(otro, concepto=concepto)
         crear_cobro(self.tramite, concepto="HONORARIOS", estado=Cobro.Estado.PAGADO)
         self.como_consulta()
-        r = self.client.get(self.URL, {"estado": "PENDIENTE", "tamano": 2, "pagina": 2})
+        r = self.client.get(self.URL, {"estado": "PENDIENTE", "page": 2})
         self.assertEqual(r.status_code, status.HTTP_200_OK)
-        self.assertEqual(r.data["count"], 3)
-        self.assertEqual(len(r.data["results"]), 1)
-        self.assertIsNone(r.data["next"])
+        self.assertEqual(r.data["total_registros"], 6)
+        self.assertEqual(len(r.data["resultados"]), 1)
+        self.assertEqual(r.data["pagina_actual"], 2)
+        self.assertEqual(r.data["total_paginas"], 2)

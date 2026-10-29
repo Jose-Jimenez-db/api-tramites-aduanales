@@ -89,7 +89,8 @@ class Command(BaseCommand):
             if creado:
                 usuario.set_password(clave)
                 usuario.save()
-            usuario.groups.set([Group.objects.get(name=rol)])
+            grupo, _ = Group.objects.get_or_create(name=rol)
+            usuario.groups.set([grupo])
 
         admin = Usuario.objects.get(username="admin_demo")
         operador = Usuario.objects.get(username="operador_demo")
