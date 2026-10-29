@@ -36,19 +36,29 @@ ROLES_POR_METODO = {
 }
 
 
+# Qué hace: Se obtiene el rol del usuario, o sea el nombre de su grupo (Administrador, Operador o
+#     Consulta).
+# Qué usa: El usuario que viene en la solicitud, el campo is_superuser y la tabla de grupos de
+#     Django (Group).
+# Cómo lo hace: Si el usuario es superusuario se toma como Administrador. Si no, se busca el primer
+#     grupo del usuario que esté en la lista ROLES y se devuelve su nombre. Si no tiene ninguno se
+#     devuelve None.
 def obtener_rol(usuario):
-    """Devuelve el rol (nombre del grupo) del usuario, o None si no tiene."""
     if usuario.is_superuser:
         return ADMINISTRADOR
     grupo = usuario.groups.filter(name__in=ROLES).first()
     return grupo.name if grupo else None
 
 
+# Qué hace: Se revisa si el usuario puede hacer la operación que está pidiendo. Se llama al inicio
+#     de todas las vistas.
+# Qué usa: request.user, la función obtener_rol, el diccionario ROLES_POR_METODO y Response con los
+#     códigos 401 y 403.
+# Cómo lo hace: Primero se revisa si el usuario inició sesión; si no, se responde 401. Si no se
+#     mandan roles permitidos, se toman de la matriz según el método HTTP (GET, POST, DELETE...).
+#     Después se compara el rol del usuario con esa lista; si no está, se responde 403. Si todo
+#     está bien se devuelve None y la vista sigue normal.
 def validar_rol(request, roles_permitidos=None):
-    """
-    Devuelve una respuesta 401 o 403 si el usuario no puede hacer la operación,
-    o None si sí puede. Si no se indican roles, se usa la matriz por método.
-    """
     if not request.user.is_authenticated:
         return Response(
             {"detail": "Autenticación requerida."},

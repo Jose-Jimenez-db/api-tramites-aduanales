@@ -3,9 +3,18 @@ from django.db import models
 from clientes.models import Cliente
 
 
+# Qué hace: Se crea la tabla de cargas: los contenedores que llegan al puerto a nombre de un
+#     cliente.
+# Qué usa: models.Model, ForeignKey hacia Cliente, TextChoices y DecimalField.
+# Cómo lo hace: numero_contenedor es único. cliente es la llave foránea (relación 1:N: un cliente
+#     tiene muchas cargas) con on_delete=PROTECT para no poder borrar un cliente que ya tiene
+#     cargas, y related_name="cargas" para poder escribir cliente.cargas. El peso es DecimalField
+#     para no perder decimales.
 class Carga(models.Model):
-    """Contenedor que llega al puerto a nombre de un cliente."""
-
+    # Qué hace: Se definen los tipos de carga que se aceptan: seca, refrigerada y peligrosa.
+    # Qué usa: models.TextChoices de Django.
+    # Cómo lo hace: Cada opción tiene el valor que se guarda (SECA) y el texto que se muestra
+    #     (Carga seca). El campo tipo solo acepta estos valores.
     class Tipo(models.TextChoices):
         SECA = "SECA", "Carga seca"
         REFRIGERADA = "REFRIGERADA", "Carga refrigerada"
@@ -22,5 +31,8 @@ class Carga(models.Model):
     fecha_arribo = models.DateField()
     fecha_registro = models.DateTimeField(auto_now_add=True)
 
+    # Qué hace: Se define cómo se ve una carga como texto.
+    # Qué usa: El campo numero_contenedor.
+    # Cómo lo hace: Se devuelve el número del contenedor.
     def __str__(self):
         return self.numero_contenedor

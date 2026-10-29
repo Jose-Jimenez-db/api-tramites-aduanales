@@ -18,6 +18,10 @@ from .serializers import (
 )
 
 
+# Qué hace: Se arma la respuesta de una lista dividida en páginas de 5, igual que en clase.
+# Qué usa: Paginator, el serializador que se le pase y Response.
+# Cómo lo hace: Se divide el queryset en páginas de 5, se toma la página de ?page= y se devuelve
+#     con pagina_actual, total_paginas, total_registros y resultados.
 def respuesta_paginada(queryset, serializer_class, page_number):
     paginator = Paginator(queryset, 5)
     page = paginator.get_page(page_number)
@@ -34,6 +38,11 @@ def respuesta_paginada(queryset, serializer_class, page_number):
 # Catálogo de tipos de permiso (solo el Administrador lo modifica)
 # ---------------------------------------------------------------------------
 
+# Qué hace: GET y POST /api/tipos-permiso/ . Se lista el catálogo de permisos o se crea un tipo
+#     nuevo.
+# Qué usa: validar_rol, TipoPermiso y TipoPermisoSerializer.
+# Cómo lo hace: GET lo pueden hacer todos los roles; crear es solo del Administrador. Se listan
+#     ordenados por código o se valida y se guarda el nuevo (201 o 400).
 @api_view(['GET', 'POST'])
 def tipos_permiso_api(request):
     error = validar_rol(request, TODOS if request.method == 'GET' else SOLO_ADMIN)
@@ -51,6 +60,11 @@ def tipos_permiso_api(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/tipos-permiso/<id>/ . Se ve, se edita o se borra un tipo
+#     de permiso.
+# Qué usa: validar_rol, TipoPermiso, TipoPermisoSerializer y ProtectedError.
+# Cómo lo hace: Ver lo pueden todos; editar y borrar solo el Administrador. Se busca por id (404 si
+#     no existe). Si el tipo ya se usó en trámites, el PROTECT impide borrarlo y se responde 409.
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def tipo_permiso_detalle_api(request, id):
     error = validar_rol(request, TODOS if request.method == 'GET' else SOLO_ADMIN)
@@ -86,11 +100,13 @@ def tipo_permiso_detalle_api(request, id):
 # Trámites
 # ---------------------------------------------------------------------------
 
+# Qué hace: Se arma la consulta base de trámites que usan las vistas, ya optimizada.
+# Qué usa: select_related y prefetch_related del ORM.
+# Cómo lo hace: select_related trae con un JOIN lo que es UNO por trámite: la carga con su cliente,
+#     el transportista y el usuario que lo creó. prefetch_related trae lo que son MUCHOS por
+#     trámite (los permisos con su tipo y los cobros) en consultas aparte y Django los reparte. Así
+#     la lista hace siempre las mismas consultas, haya 5 o 500 trámites.
 def consultar_tramites():
-    """
-    select_related: carga, cliente y transportista en la misma consulta (JOIN).
-    prefetch_related: permisos (con su tipo) y cobros en consultas aparte.
-    """
     return Tramite.objects.select_related(
         'carga__cliente', 'transportista', 'creado_por'
     ).prefetch_related(
@@ -98,12 +114,16 @@ def consultar_tramites():
     )
 
 
+# Qué hace: GET y POST /api/tramites/ . Se listan los trámites con filtros o se crea uno nuevo.
+# Qué usa: validar_rol, consultar_tramites, Q, TramiteSerializer, servicios.tramite_activo_de_carga
+#     y respuesta_paginada.
+# Cómo lo hace: Se revisa el rol. En GET se pueden combinar ?estado=, ?tipo=, ?cliente= (filtro por
+#     relación: trámite -> carga -> cliente), ?transportista= y ?buscar=, y se devuelve paginado.
+#     En POST primero se validan los datos (400 si están mal), después se revisa RN-07: si la carga
+#     ya tiene un trámite activo se responde 409. Si todo está bien se guarda con el usuario que lo
+#     creó y se responde 201.
 @api_view(['GET', 'POST'])
 def tramites_api(request):
-    """
-    Filtros combinables:
-    ?estado=APROBADO  ?tipo=IMPORTACION  ?cliente=1  ?transportista=2  ?buscar=texto  ?page=2
-    """
     error = validar_rol(request)
     if error:
         return error
@@ -161,6 +181,12 @@ def tramites_api(request):
     )
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/tramites/<id>/ . Se ve, se edita o se borra un trámite.
+# Qué usa: validar_rol, consultar_tramites, TramiteSerializer, servicios y ProtectedError.
+# Cómo lo hace: Se busca el trámite (404 si no existe). RN-12: si está LIBERADO o CANCELADO no se
+#     puede editar (409). Al editar también se revisa RN-07 por si se cambia la carga. Al borrar,
+#     solo se pueden borrar trámites REGISTRADOS (los demás se cancelan, 409); si tiene cobros, el
+#     PROTECT lo impide y también se responde 409.
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def tramite_detalle_api(request, id):
     error = validar_rol(request)
@@ -214,9 +240,15 @@ def tramite_detalle_api(request, id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# Qué hace: POST /api/tramites/<id>/cambiar-estado/ con {"estado": "EN_REVISION"}. Se cambia el
+#     estado del trámite.
+# Qué usa: validar_rol con ESCRITURA, CambiarEstadoSerializer y las funciones de servicios.py.
+# Cómo lo hace: Solo Administrador y Operador. Se busca el trámite (404), se valida que el estado
+#     exista (400) y se llama a validar_cambio_estado para revisar RN-09, RN-10 y RN-11. Si hay un
+#     problema se responde con su código y el motivo. Si no, se llama a cambiar_estado y se
+#     devuelve el trámite actualizado.
 @api_view(['POST'])
 def tramite_cambiar_estado_api(request, id):
-    """POST /api/tramites/{id}/cambiar-estado/   {"estado": "EN_REVISION"}"""
     error = validar_rol(request, ESCRITURA)
     if error:
         return error
@@ -241,9 +273,15 @@ def tramite_cambiar_estado_api(request, id):
     return Response(TramiteSerializer(consultar_tramites().get(id=id)).data)
 
 
+# Qué hace: POST /api/tramites/<id>/resolver-permiso/ con {"permiso": 3, "estado": "APROBADO",
+#     "numero_resolucion": "..."}. Se aprueba o se rechaza un permiso del trámite.
+# Qué usa: validar_rol con ESCRITURA, ResolverPermisoSerializer, PermisoTramite y timezone.
+# Cómo lo hace: Solo Administrador y Operador. Se validan los datos (RN-15: aprobar pide número de
+#     resolución). Los permisos solo se resuelven con el trámite EN_REVISION (si no, 400). Se busca
+#     el permiso dentro de ese trámite (404 si no es de él) y se guarda el estado, el número y la
+#     fecha de resolución.
 @api_view(['POST'])
 def tramite_resolver_permiso_api(request, id):
-    """POST /api/tramites/{id}/resolver-permiso/   {"permiso": 3, "estado": "APROBADO", "numero_resolucion": "..."}"""
     error = validar_rol(request, ESCRITURA)
     if error:
         return error

@@ -69,9 +69,27 @@ CARGAS = [
 ]
 
 
+# Qué hace: Se crea el comando python manage.py cargar_datos, que llena la base de datos con datos
+#     inventados para probar y presentar la API.
+# Qué usa: BaseCommand de Django. Django busca los comandos en la carpeta
+#     <app>/management/commands/.
+# Cómo lo hace: Se hereda de BaseCommand y en help se pone la descripción que sale con python
+#     manage.py help cargar_datos. Lo que hace el comando está en el método handle.
 class Command(BaseCommand):
     help = "Crea usuarios de prueba y datos ficticios para la demostración."
 
+    # Qué hace: Es lo que se ejecuta al correr el comando: se crean los usuarios de prueba, el
+    #     catálogo de permisos, los clientes, los transportistas, las cargas y los trámites con sus
+    #     cobros.
+    # Qué usa: os.getenv para leer DEMO_PASSWORD del .env, get_or_create, timedelta para las
+    #     fechas, Decimal para los pesos y transaction.atomic.
+    # Cómo lo hace: Primero se lee DEMO_PASSWORD; si no existe se detiene con un error, así la
+    #     clave nunca queda escrita en el código. Después se recorren las listas de arriba
+    #     (USUARIOS, TIPOS_PERMISO, CLIENTES, TRANSPORTISTAS, CARGAS) y se crea cada registro con
+    #     get_or_create, que primero busca y solo crea si no existe; por eso se puede correr varias
+    #     veces sin duplicar. Las fechas se calculan desde hoy con timedelta. Los trámites solo se
+    #     crean si todavía no hay ninguno. Todo va en una transacción: si algo falla no queda nada
+    #     a medias.
     @transaction.atomic
     def handle(self, *args, **options):
         clave = os.getenv("DEMO_PASSWORD")
@@ -149,6 +167,12 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Datos de demostración cargados correctamente."))
         self.stdout.write("Usuarios: admin_demo, operador_demo, consulta_demo (clave = DEMO_PASSWORD)")
 
+    # Qué hace: Se crea un trámite para una carga y se le asignan los permisos que le tocan según
+    #     el tipo de carga.
+    # Qué usa: Los modelos Tramite, TipoPermiso y PermisoTramite, y bulk_create.
+    # Cómo lo hace: Se crea el trámite con la carga, el tipo y el usuario que lo crea. Después se
+    #     buscan los tipos de permiso activos que aplican a TODAS las cargas o al tipo de esta
+    #     carga, y se crean todos los PermisoTramite de una sola vez con bulk_create.
     def _nuevo_tramite(self, carga, usuario, tipo=Tramite.Tipo.IMPORTACION):
         tramite = Tramite.objects.create(carga=carga, tipo=tipo, creado_por=usuario)
         permisos = TipoPermiso.objects.filter(activo=True, aplica_a__in=["TODAS", carga.tipo])
@@ -157,6 +181,10 @@ class Command(BaseCommand):
         )
         return tramite
 
+    # Qué hace: Se marcan como aprobados todos los permisos de un trámite.
+    # Qué usa: La relación permisos_tramite del trámite y timezone.now().
+    # Cómo lo hace: Se recorren los permisos del trámite y a cada uno se le pone estado APROBADO,
+    #     un número de resolución inventado (RES-<id>-<número>) y la fecha de hoy, y se guarda.
     def _aprobar_permisos(self, tramite):
         ahora = timezone.now()
         for i, permiso in enumerate(tramite.permisos_tramite.all(), start=1):
@@ -165,6 +193,13 @@ class Command(BaseCommand):
             permiso.fecha_resolucion = ahora
             permiso.save()
 
+    # Qué hace: Se crean 5 trámites de ejemplo, cada uno en un estado distinto, con sus cobros.
+    # Qué usa: Las funciones _nuevo_tramite y _aprobar_permisos, el modelo Cobro y Decimal para los
+    #     montos.
+    # Cómo lo hace: Trámite 1: liberado y con todo pagado. Trámite 2: aprobado y listo para
+    #     liberar. Trámite 3: en revisión con un cobro pendiente. Trámite 4: aprobado pero con un
+    #     cobro pendiente, así que no se puede liberar. Trámite 5: recién registrado de
+    #     exportación. Así en la demostración hay un ejemplo de cada caso.
     def _crear_tramites(self, cargas, transportistas, admin, operador):
         ahora = timezone.now()
         E = Tramite.Estado

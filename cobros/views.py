@@ -10,6 +10,10 @@ from .models import Cobro
 from .serializers import CobroSerializer, RegistrarPagoSerializer
 
 
+# Qué hace: Se arma la respuesta de una lista dividida en páginas de 5, igual que en clase.
+# Qué usa: Paginator, el serializador que se le pase y Response.
+# Cómo lo hace: Se divide el queryset en páginas de 5, se toma la página de ?page= y se devuelve
+#     con pagina_actual, total_paginas, total_registros y resultados.
 def respuesta_paginada(queryset, serializer_class, page_number):
     paginator = Paginator(queryset, 5)
     page = paginator.get_page(page_number)
@@ -22,20 +26,27 @@ def respuesta_paginada(queryset, serializer_class, page_number):
     })
 
 
+# Qué hace: RN-13: se revisa si el trámite ya tiene un cobro vigente de ese mismo concepto.
+# Qué usa: El modelo Cobro, filter, exclude y exists.
+# Cómo lo hace: Se buscan los cobros del trámite con ese concepto que no estén anulados. Si se
+#     manda excluir_id, se deja por fuera ese cobro (sirve al editar). Se devuelve True o False.
 def concepto_repetido(tramite, concepto, excluir_id=None):
-    """RN-13: True si el trámite ya tiene un cobro vigente de ese concepto."""
     cobros = Cobro.objects.filter(tramite=tramite, concepto=concepto).exclude(estado='ANULADO')
     if excluir_id:
         cobros = cobros.exclude(id=excluir_id)
     return cobros.exists()
 
 
+# Qué hace: GET y POST /api/cobros/ . Se listan los cobros con filtros y orden, o se registra un
+#     cobro nuevo.
+# Qué usa: validar_rol, select_related, CobroSerializer, concepto_repetido y respuesta_paginada.
+# Cómo lo hace: Se revisa el rol. En GET se traen los cobros con su trámite, carga, cliente y
+#     usuario en la misma consulta. Se pueden combinar ?estado=, ?concepto=, ?tramite= y ?cliente=
+#     (relación de tres saltos). Para ?ordenar= se usa lstrip('-') para revisar que el campo esté
+#     permitido. En POST se valida (400) y se revisa que el concepto no esté repetido (409). Si
+#     todo está bien se guarda con el usuario que lo registró y se responde 201.
 @api_view(['GET', 'POST'])
 def cobros_api(request):
-    """
-    Filtros combinables:
-    ?estado=PENDIENTE  ?concepto=ALMACENAJE  ?tramite=3  ?cliente=1  ?ordenar=-monto  ?page=2
-    """
     error = validar_rol(request)
     if error:
         return error
@@ -89,6 +100,11 @@ def cobros_api(request):
     return Response(serializer.data, status=status.HTTP_201_CREATED)
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/cobros/<id>/ . Se ve, se edita o se borra un cobro.
+# Qué usa: validar_rol, select_related, CobroSerializer y concepto_repetido.
+# Cómo lo hace: Se busca el cobro (404 si no existe). RN-14: si ya está PAGADO o ANULADO no se
+#     puede editar ni borrar (409). Al editar se revisa otra vez que el concepto no quede repetido
+#     (409).
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def cobro_detalle_api(request, id):
     error = validar_rol(request)
@@ -129,9 +145,14 @@ def cobro_detalle_api(request, id):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# Qué hace: POST /api/cobros/<id>/registrar-pago/ con {"metodo_pago": "TRANSFERENCIA"}. Se marca el
+#     cobro como pagado.
+# Qué usa: validar_rol con ESCRITURA, RegistrarPagoSerializer y timezone.now().
+# Cómo lo hace: Solo Administrador y Operador. Si el cobro ya no está pendiente se responde 409. Se
+#     valida el método de pago, se cambia el estado a PAGADO y la fecha de pago se pone sola con la
+#     fecha y hora de ese momento.
 @api_view(['POST'])
 def cobro_registrar_pago_api(request, id):
-    """POST /api/cobros/{id}/registrar-pago/   {"metodo_pago": "TRANSFERENCIA"}"""
     error = validar_rol(request, ESCRITURA)
     if error:
         return error
@@ -155,9 +176,13 @@ def cobro_registrar_pago_api(request, id):
     return Response(CobroSerializer(cobro).data)
 
 
+# Qué hace: POST /api/cobros/<id>/anular/ . Se anula un cobro. Solo lo puede hacer el
+#     Administrador.
+# Qué usa: validar_rol con SOLO_ADMIN y el modelo Cobro.
+# Cómo lo hace: Se busca el cobro (404). Solo se pueden anular cobros pendientes (si no, 409). Se
+#     cambia el estado a ANULADO y se guarda.
 @api_view(['POST'])
 def cobro_anular_api(request, id):
-    """POST /api/cobros/{id}/anular/   (solo Administrador)"""
     error = validar_rol(request, SOLO_ADMIN)
     if error:
         return error

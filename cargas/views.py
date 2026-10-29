@@ -12,6 +12,10 @@ from .models import Carga
 from .serializers import CargaSerializer
 
 
+# Qué hace: Se arma la respuesta de una lista dividida en páginas de 5, igual que en clase.
+# Qué usa: Paginator, el serializador que se le pase y Response.
+# Cómo lo hace: Se divide el queryset en páginas de 5, se toma la página de ?page= y se devuelve
+#     con pagina_actual, total_paginas, total_registros y resultados.
 def respuesta_paginada(queryset, serializer_class, page_number):
     paginator = Paginator(queryset, 5)
     page = paginator.get_page(page_number)
@@ -24,13 +28,18 @@ def respuesta_paginada(queryset, serializer_class, page_number):
     })
 
 
+# Qué hace: GET y POST /api/cargas/ . Se listan las cargas con filtros, búsqueda y orden, o se crea
+#     una.
+# Qué usa: validar_rol, select_related, Q, Decimal, InvalidOperation, CargaSerializer y
+#     respuesta_paginada.
+# Cómo lo hace: Se revisa el rol. En GET se traen las cargas con select_related('cliente') para que
+#     el cliente venga en la misma consulta (JOIN). Se pueden combinar los filtros ?cliente=,
+#     ?tipo=, ?peso_min=, ?cliente_cedula= (filtro por relación: busca en la tabla de clientes) y
+#     ?buscar=. Si un valor no sirve se responde 400. Para ordenar con ?ordenar= se usa lstrip('-')
+#     para quitar el guion (que significa de mayor a menor) y revisar que el campo esté en la lista
+#     permitida; se agrega 'id' para desempatar. En POST se valida y se guarda.
 @api_view(['GET', 'POST'])
 def cargas_api(request):
-    """
-    Filtros combinables:
-    ?cliente=1  ?tipo=REFRIGERADA  ?peso_min=10000  ?cliente_cedula=3-101-100001
-    ?buscar=texto  ?ordenar=-peso_kg  ?page=2
-    """
     error = validar_rol(request)
     if error:
         return error
@@ -85,6 +94,11 @@ def cargas_api(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/cargas/<id>/ . Se ve, se edita o se borra una carga.
+# Qué usa: validar_rol, select_related, CargaSerializer y ProtectedError.
+# Cómo lo hace: Se busca la carga con su cliente (404 si no existe). GET la devuelve y PUT o PATCH
+#     la editan. En DELETE, si la carga ya tiene trámites, el PROTECT lanza ProtectedError y se
+#     responde 409.
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def carga_detalle_api(request, id):
     error = validar_rol(request)

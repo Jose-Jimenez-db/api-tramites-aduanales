@@ -10,6 +10,12 @@ from .models import Cliente
 from .serializers import ClienteSerializer
 
 
+# Qué hace: Se arma la respuesta de una lista dividida en páginas de 5, igual que en el proyecto de
+#     clase.
+# Qué usa: Paginator de Django, el serializador que se le pase y Response.
+# Cómo lo hace: Se divide el queryset en páginas de 5, se toma la página que pidió el usuario con
+#     ?page= (get_page da la última si el número se pasa), se convierte a JSON y se devuelve con
+#     pagina_actual, total_paginas, total_registros y resultados.
 def respuesta_paginada(queryset, serializer_class, page_number):
     paginator = Paginator(queryset, 5)
     page = paginator.get_page(page_number)
@@ -22,6 +28,15 @@ def respuesta_paginada(queryset, serializer_class, page_number):
     })
 
 
+# Qué hace: GET y POST /api/clientes/ . Se listan los clientes con filtros y búsqueda, o se crea un
+#     cliente.
+# Qué usa: validar_rol, el modelo Cliente, Count y Q del ORM, ClienteSerializer y
+#     respuesta_paginada.
+# Cómo lo hace: Primero se revisa el rol. En GET se traen los clientes con
+#     annotate(Count('cargas')) para saber cuántas cargas tiene cada uno. Si viene ?activo= se
+#     revisa que sea true o false (si no, 400) y se filtra. Si viene ?buscar= se busca en nombre,
+#     cédula o correo usando Q con | (que significa "o"). Al final se devuelve paginado. En POST se
+#     validan los datos con el serializador: si están bien se guarda y se responde 201, si no 400.
 @api_view(['GET', 'POST'])
 def clientes_api(request):
     error = validar_rol(request)
@@ -60,6 +75,12 @@ def clientes_api(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/clientes/<id>/ . Se ve, se edita o se borra un cliente.
+# Qué usa: validar_rol, el modelo Cliente con Count, ClienteSerializer y ProtectedError.
+# Cómo lo hace: Se revisa el rol (borrar es solo del Administrador) y se busca el cliente; si no
+#     existe se responde 404. GET devuelve el cliente. PUT y PATCH lo editan con el serializador
+#     (PATCH con partial=True). En DELETE, si el cliente tiene cargas, Django lanza ProtectedError
+#     por el on_delete=PROTECT y se responde 409; si no, se borra y se responde 204.
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def cliente_detalle_api(request, id):
     error = validar_rol(request)
