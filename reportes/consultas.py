@@ -19,11 +19,14 @@ from transportistas.models import Transportista
 CERO = Value(Decimal("0.00"), output_field=DecimalField(max_digits=14, decimal_places=2))
 
 
+# Qué hace: Consulta Q1: por cada cliente se calcula cuántas cargas tiene, cuántos trámites
+#     activos, cuánto se le ha facturado y cuánto debe.
+# Qué usa: annotate, Count, Sum, Q, Coalesce y values del ORM.
+# Cómo lo hace: Se recorren las relaciones cliente -> cargas -> trámites -> cobros con __. Count
+#     con distinct=True cuenta sin repetir. Sum con filter=Q(...) suma solo los cobros que cumplen
+#     (vigentes o pendientes). Coalesce pone 0 en vez de vacío cuando no hay cobros. Se ordena por
+#     el saldo pendiente de mayor a menor.
 def resumen_por_cliente():
-    """
-    Q1 - Agregación con filtros por relación (cliente -> cargas -> trámites -> cobros).
-    Por cliente: cantidad de cargas, trámites activos, total facturado y saldo pendiente.
-    """
     cobros_vigentes = Q(
         cargas__tramites__cobros__estado__in=[Cobro.Estado.PENDIENTE, Cobro.Estado.PAGADO]
     )
@@ -54,19 +57,24 @@ def resumen_por_cliente():
     )
 
 
+# Qué hace: Consulta Q2: se cuenta cuántos trámites hay en cada estado y de cada tipo.
+# Qué usa: values, annotate y Count (es como un GROUP BY en SQL).
+# Cómo lo hace: values('estado') agrupa por estado y annotate(Count('id')) cuenta cuántos hay en
+#     cada grupo. Lo mismo se hace por tipo y se devuelven las dos listas.
 def tramites_por_estado():
-    """Q2 - Agrupación (GROUP BY) de trámites por estado y por tipo."""
     por_estado = Tramite.objects.values("estado").annotate(cantidad=Count("id")).order_by("estado")
     por_tipo = Tramite.objects.values("tipo").annotate(cantidad=Count("id")).order_by("tipo")
     return {"por_estado": list(por_estado), "por_tipo": list(por_tipo)}
 
 
+# Qué hace: Consulta Q3: se buscan los trámites APROBADOS que ya se pueden liberar.
+# Qué usa: filter con relaciones, subconsultas con values, pk__in, exclude, select_related y
+#     timezone.
+# Cómo lo hace: Se piden trámites aprobados con transportista activo y licencia vigente (se filtra
+#     por campos del transportista con __), que tengan al menos un cobro pagado (pk__in) y ningún
+#     cobro pendiente (exclude). select_related trae la carga, el cliente y el transportista en la
+#     misma consulta.
 def tramites_listos_para_liberar():
-    """
-    Q3 - Filtros por relaciones + select_related.
-    Trámites APROBADOS, con transportista activo y licencia vigente,
-    con al menos un cobro pagado y sin cobros pendientes.
-    """
     hoy = timezone.localdate()
     con_pendientes = Cobro.objects.filter(estado=Cobro.Estado.PENDIENTE).values("tramite_id")
     con_pagados = Cobro.objects.filter(estado=Cobro.Estado.PAGADO).values("tramite_id")
@@ -83,11 +91,13 @@ def tramites_listos_para_liberar():
     )
 
 
+# Qué hace: Consulta Q4: transportistas activos cuya licencia vence en los próximos N días, con
+#     cuántos trámites activos tienen.
+# Qué usa: timedelta, filter, annotate, Count con filter=Q y timezone.
+# Cómo lo hace: Se calcula el rango de fechas desde hoy hasta hoy + timedelta(days=dias) y se
+#     filtran las licencias que vencen en ese rango. Después se cuentan solo los trámites activos
+#     de cada uno y se ordena por la fecha que vence primero.
 def licencias_por_vencer(dias):
-    """
-    Q4 - Agregación condicional: transportistas activos cuya licencia vence en
-    los próximos `dias` días, con la cantidad de trámites activos asignados.
-    """
     hoy = timezone.localdate()
     return (
         Transportista.objects.filter(
@@ -102,8 +112,14 @@ def licencias_por_vencer(dias):
     )
 
 
+# Qué hace: Consulta Q5: cuánto se cobró (ya pagado) entre dos fechas, separado por concepto y con
+#     el total.
+# Qué usa: datetime, time, timedelta, make_aware, values, annotate, aggregate, Sum y Coalesce.
+# Cómo lo hace: Como fecha_pago tiene hora, se arma el inicio a las 00:00 de la fecha desde y el
+#     final a las 00:00 del día siguiente a hasta (hasta + timedelta(days=1)), para incluir todo
+#     ese día. Se agrupa por concepto con values + annotate y se saca el total general con
+#     aggregate.
 def ingresos_por_concepto(desde, hasta):
-    """Q5 - Agregación de cobros pagados en un rango de fechas, agrupada por concepto."""
     inicio = timezone.make_aware(datetime.combine(desde, time.min))
     fin = timezone.make_aware(datetime.combine(hasta + timedelta(days=1), time.min))
     pagados = Cobro.objects.filter(
@@ -118,11 +134,13 @@ def ingresos_por_concepto(desde, hasta):
     return {"detalle": list(detalle), **totales}
 
 
+# Qué hace: Consulta Q6: cuántos permisos pendientes tiene cada institución, solo de trámites que
+#     siguen abiertos.
+# Qué usa: filter, values con un campo de otra tabla, annotate y Count con distinct.
+# Cómo lo hace: Se filtran los permisos pendientes de trámites activos y se agrupan por
+#     tipo_permiso__institucion, que es un campo de la tabla de tipos de permiso. Se cuentan los
+#     permisos y los trámites distintos, y se ordena de mayor a menor.
 def permisos_pendientes_por_institucion():
-    """
-    Q6 - Agrupación por un campo de otra tabla (tipo_permiso__institucion),
-    solo de trámites que siguen activos.
-    """
     return (
         PermisoTramite.objects.filter(
             estado=PermisoTramite.Estado.PENDIENTE,

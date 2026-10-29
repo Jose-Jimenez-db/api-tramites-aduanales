@@ -10,10 +10,17 @@ from .serializers import LoginSerializer, UsuarioSerializer
 Usuario = get_user_model()
 
 
+# Qué hace: POST /api/auth/login/ . Se inicia sesión: se recibe usuario y contraseña y se devuelve
+#     el token y el rol.
+# Qué usa: @api_view, @authentication_classes([]), LoginSerializer, Token de
+#     rest_framework.authtoken y obtener_rol.
+# Cómo lo hace: Se quita la autenticación de esta vista porque para iniciar sesión todavía no hay
+#     token. Se validan los datos con LoginSerializer (si están mal, 400). Luego se busca o se crea
+#     el token del usuario con Token.objects.get_or_create y se responde con el token, el usuario y
+#     el rol.
 @api_view(['POST'])
 @authentication_classes([])  # el login no necesita token
 def login_api(request):
-    """POST /api/auth/login/   {"username": "...", "password": "..."} -> token y rol"""
     serializer = LoginSerializer(data=request.data)
     if not serializer.is_valid():
         return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
@@ -27,9 +34,12 @@ def login_api(request):
     })
 
 
+# Qué hace: POST /api/auth/logout/ . Se cierra la sesión borrando el token del usuario.
+# Qué usa: @api_view, validar_rol y el modelo Token.
+# Cómo lo hace: Se revisa que el usuario tenga sesión con validar_rol. Después se borra su token de
+#     la base de datos, así el token ya no sirve más. Se responde 204 sin contenido.
 @api_view(['POST'])
 def logout_api(request):
-    """POST /api/auth/logout/ -> elimina el token actual"""
     error = validar_rol(request, TODOS)
     if error:
         return error
@@ -37,18 +47,27 @@ def logout_api(request):
     return Response(status=status.HTTP_204_NO_CONTENT)
 
 
+# Qué hace: GET /api/auth/perfil/ . Se devuelven los datos del usuario que tiene la sesión
+#     iniciada.
+# Qué usa: @api_view, validar_rol y UsuarioSerializer.
+# Cómo lo hace: Se revisa que el usuario tenga sesión (cualquier rol sirve) y se responde con sus
+#     datos convertidos a JSON, incluido el rol.
 @api_view(['GET'])
 def perfil_api(request):
-    """GET /api/auth/perfil/ -> datos del usuario autenticado"""
     error = validar_rol(request, TODOS)
     if error:
         return error
     return Response(UsuarioSerializer(request.user).data)
 
 
+# Qué hace: GET y POST /api/auth/usuarios/ . Se listan todos los usuarios o se crea uno nuevo. Solo
+#     lo puede hacer el Administrador.
+# Qué usa: @api_view, validar_rol con SOLO_ADMIN, el modelo de usuario y UsuarioSerializer.
+# Cómo lo hace: Primero se revisa que sea Administrador (si no, 403). Si es GET se traen los
+#     usuarios ordenados por username. Si es POST se validan los datos con el serializador; si
+#     están bien se guarda y se responde 201, si no se responde 400 con los errores.
 @api_view(['GET', 'POST'])
 def usuarios_api(request):
-    """Administración de usuarios: solo el rol Administrador."""
     error = validar_rol(request, SOLO_ADMIN)
     if error:
         return error
@@ -64,6 +83,12 @@ def usuarios_api(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/auth/usuarios/<id>/ . Se ve, se edita o se borra un
+#     usuario. Solo lo puede hacer el Administrador.
+# Qué usa: @api_view, validar_rol con SOLO_ADMIN, el modelo de usuario y UsuarioSerializer.
+# Cómo lo hace: Se revisa que sea Administrador y se busca el usuario por id (si no existe, 404).
+#     GET devuelve sus datos. PUT y PATCH lo editan con el serializador (PATCH con partial=True
+#     para mandar solo algunos campos). DELETE lo borra y responde 204.
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def usuario_detalle_api(request, id):
     error = validar_rol(request, SOLO_ADMIN)

@@ -11,6 +11,10 @@ from .models import Transportista
 from .serializers import TransportistaSerializer
 
 
+# Qué hace: Se arma la respuesta de una lista dividida en páginas de 5, igual que en clase.
+# Qué usa: Paginator, el serializador que se le pase y Response.
+# Cómo lo hace: Se divide el queryset en páginas de 5, se toma la página de ?page= y se devuelve
+#     con pagina_actual, total_paginas, total_registros y resultados.
 def respuesta_paginada(queryset, serializer_class, page_number):
     paginator = Paginator(queryset, 5)
     page = paginator.get_page(page_number)
@@ -23,6 +27,14 @@ def respuesta_paginada(queryset, serializer_class, page_number):
     })
 
 
+# Qué hace: GET y POST /api/transportistas/ . Se listan los transportistas con filtros o se crea
+#     uno.
+# Qué usa: validar_rol, el modelo Transportista, timezone, TransportistaSerializer y
+#     respuesta_paginada.
+# Cómo lo hace: Se revisa el rol. En GET se pueden combinar dos filtros: ?activo= y
+#     ?licencia_vigente= (los dos deben ser true o false; si no, 400). Como licencia_vigente no es
+#     una columna, se filtra comparando vencimiento_licencia con hoy (__gte = mayor o igual, __lt =
+#     menor). En POST se valida y se guarda (201) o se responde 400.
 @api_view(['GET', 'POST'])
 def transportistas_api(request):
     error = validar_rol(request)
@@ -62,6 +74,12 @@ def transportistas_api(request):
     return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
+# Qué hace: GET, PUT, PATCH y DELETE /api/transportistas/<id>/ . Se ve, se edita o se borra un
+#     transportista.
+# Qué usa: validar_rol, el modelo Transportista, TransportistaSerializer y ProtectedError.
+# Cómo lo hace: Se busca por id (404 si no existe). GET lo devuelve, PUT y PATCH lo editan. En
+#     DELETE, si ya tiene trámites, el PROTECT lanza ProtectedError y se responde 409 pidiendo
+#     desactivarlo en vez de borrarlo.
 @api_view(['GET', 'PUT', 'PATCH', 'DELETE'])
 def transportista_detalle_api(request, id):
     error = validar_rol(request)

@@ -2,6 +2,10 @@ from django.urls import path
 
 from . import views
 
+# Qué hace: Se definen las 6 rutas de los reportes (van bajo /api/reportes/).
+# Qué usa: path() de Django y las vistas de views.py.
+# Cómo lo hace: Cada path une una dirección con la vista que la atiende. Así se hacen las rutas a
+#     mano, sin routers, como pidió el profesor.
 urlpatterns = [
     path("resumen-clientes/", views.resumen_clientes_api, name="reporte_resumen_clientes"),
     path("tramites-por-estado/", views.tramites_por_estado_api, name="reporte_tramites_por_estado"),

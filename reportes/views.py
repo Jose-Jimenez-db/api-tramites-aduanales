@@ -14,9 +14,12 @@ from cuentas.permisos import TODOS, validar_rol
 from . import consultas
 
 
+# Qué hace: GET /api/reportes/resumen-clientes/ . Se devuelve la consulta Q1 (resumen por cliente).
+# Qué usa: validar_rol con TODOS y consultas.resumen_por_cliente.
+# Cómo lo hace: Cualquier rol puede verlo. Si viene ?solo_con_saldo=true se dejan solo los clientes
+#     que deben algo (saldo_pendiente mayor que 0).
 @api_view(['GET'])
 def resumen_clientes_api(request):
-    """GET /api/reportes/resumen-clientes/   ?solo_con_saldo=true"""
     error = validar_rol(request, TODOS)
     if error:
         return error
@@ -27,18 +30,25 @@ def resumen_clientes_api(request):
     return Response(list(datos))
 
 
+# Qué hace: GET /api/reportes/tramites-por-estado/ . Se devuelve la consulta Q2 (trámites por
+#     estado y por tipo).
+# Qué usa: validar_rol con TODOS y consultas.tramites_por_estado.
+# Cómo lo hace: Se revisa que el usuario tenga sesión y se devuelve el resultado tal cual.
 @api_view(['GET'])
 def tramites_por_estado_api(request):
-    """GET /api/reportes/tramites-por-estado/"""
     error = validar_rol(request, TODOS)
     if error:
         return error
     return Response(consultas.tramites_por_estado())
 
 
+# Qué hace: GET /api/reportes/listos-para-liberar/ . Se devuelve la consulta Q3 (trámites listos
+#     para liberar).
+# Qué usa: validar_rol con TODOS y consultas.tramites_listos_para_liberar.
+# Cómo lo hace: Se recorre el resultado y de cada trámite se arma un diccionario con el código, el
+#     contenedor, el cliente, el transportista y la placa. Se devuelve la cantidad y la lista.
 @api_view(['GET'])
 def listos_para_liberar_api(request):
-    """GET /api/reportes/listos-para-liberar/"""
     error = validar_rol(request, TODOS)
     if error:
         return error
@@ -56,9 +66,13 @@ def listos_para_liberar_api(request):
     return Response({'cantidad': len(datos), 'tramites': datos})
 
 
+# Qué hace: GET /api/reportes/licencias-por-vencer/?dias=30 . Se devuelve la consulta Q4.
+# Qué usa: validar_rol con TODOS, isdigit y consultas.licencias_por_vencer.
+# Cómo lo hace: Si no se manda ?dias= se usa 30. Se revisa que sea un número entre 1 y 365; si no,
+#     400. Después se arma la lista de transportistas con su fecha de vencimiento y sus trámites
+#     activos.
 @api_view(['GET'])
 def licencias_por_vencer_api(request):
-    """GET /api/reportes/licencias-por-vencer/   ?dias=30 (de 1 a 365)"""
     error = validar_rol(request, TODOS)
     if error:
         return error
@@ -80,9 +94,14 @@ def licencias_por_vencer_api(request):
     return Response({'dias': dias, 'transportistas': datos})
 
 
+# Qué hace: GET /api/reportes/ingresos/?desde=AAAA-MM-DD&hasta=AAAA-MM-DD . Se devuelve la consulta
+#     Q5.
+# Qué usa: validar_rol con TODOS, date.fromisoformat, timezone y consultas.ingresos_por_concepto.
+# Cómo lo hace: Si no vienen fechas, hasta es hoy y desde es el primer día del mes. Si una fecha no
+#     tiene el formato AAAA-MM-DD se responde 400, y también si desde es mayor que hasta. Se
+#     devuelve el rango con el detalle por concepto y el total.
 @api_view(['GET'])
 def ingresos_api(request):
-    """GET /api/reportes/ingresos/   ?desde=AAAA-MM-DD (inicio del mes)  ?hasta=AAAA-MM-DD (hoy)"""
     error = validar_rol(request, TODOS)
     if error:
         return error
@@ -103,9 +122,12 @@ def ingresos_api(request):
     return Response({'desde': desde, 'hasta': hasta, **resultado})
 
 
+# Qué hace: GET /api/reportes/permisos-pendientes/ . Se devuelve la consulta Q6.
+# Qué usa: validar_rol con TODOS y consultas.permisos_pendientes_por_institucion.
+# Cómo lo hace: Se recorre el resultado y se cambian los nombres de las llaves para que se
+#     entiendan mejor (institucion, permisos_pendientes, tramites_afectados).
 @api_view(['GET'])
 def permisos_pendientes_api(request):
-    """GET /api/reportes/permisos-pendientes/"""
     error = validar_rol(request, TODOS)
     if error:
         return error
